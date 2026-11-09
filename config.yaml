@@ -1,0 +1,107 @@
+setup : #user input
+  where : 'nersc' #usdf or nersc or rsp
+  home_dir :  #path where I want everything to save
+    nersc : '$HOME/ufd_alfred'
+    usdf : '$HOME/rubin-user/ufd_alfred'
+    rsp : '$HOME/ufd_alfred'
+  pckg_dir : 'alfred' #path to the package
+  data_dir : 'external_data' #path to the external data needed (maps, euclid data, etc)
+output:
+  results_dir : 'results'
+  plots_dir : 'plots'
+
+nside_shards : 32
+nside_search : 64
+
+#change with new data releases
+opt_survey : 'lsst_dp2' #or 'lsst_dp1', 'lsst_dp2', or 'des_y6'
+ir_survey : 'euclid_q1' #or 'euclid dr1' or eventually 'roman'
+
+lsst_dp2:
+    repo_config :
+        nersc : 'dp2'
+        usdf : 'dp2_prep'
+        rsp : 'dp2'
+    collection :
+        nersc : 'dp2'
+        usdf : ['LSSTCam/runs/DRP/DP2/v30_0_0/DM-53881/stage1',
+                'LSSTCam/runs/DRP/DP2/v30_0_0/DM-53881/stage2',
+                'LSSTCam/runs/DRP/DP2/v30_0_6_rc1/DM-53881/stage3',
+                'LSSTCam/runs/DRP/DP2/v30_0_0/DM-53881/stage4']
+        rsp : 'dp2'
+    instrument : 'LSSTCam'
+    skymap : 'lsst_cells_v2'
+    #tract_list :
+    field2tract_dict : {'47 Tuc' : [531, 532, 453, 454],
+                        'ECDFS' : [4848, 4849, 5063, 4636, 4637, 4638, 4847, 4850, 5061, 5062, 5064, 5065, 5279, 5280, 5281,
+                                 5282], #Euclid's "Euclid Deep Field Fornax" encompasses Extended Chandra Deep Field South
+                        'EDFS' : [2078, 2079, 2080, 2232, 2233, 2234, 2235, 2236, 2237, 2392, 2393, 2394, 2395, 2396, 2397,
+                                2557, 2558, 2559, 2560, 2561, 2562, 2728, 2729, 2730, 2731],
+                        'Fornax' : [4016, 4017, 4218, 4217],
+                        'FDSG' : [4016, 4017, 4218, 4217], #same as Fornax idk how it'll be referred to
+                        'Rubin_SV_095-25' : [5525, 5526],
+                        'Rubin_SV_38_7' : [10463, 10464, 10704],
+                        'LELF': [10464, 10221, 10222, 10704, 10705, 10463], # Low Ecliptic Latitude Field / Rubin_SV_38_7
+                        'Seagull' : [7850, 7849, 7610, 7611],
+                        }
+    bands : 'griz'
+    # depending on which survey, our preferred star-galaxy separating columns will change
+    INCOLS : ['coord_ra', 'coord_dec', 'detect_isIsolated', '{band}_psfFlux', '{band}_cModelFlux', 
+              '{band}_cModelFluxErr', '{band}_psfFluxErr', 'refExtendedness', '{band}_extendedness',
+              '{band}_psfFlux_flag', '{band}_model_extendedness']
+    s-g separator : '{band}_model_extendedness'
+
+euclid_q1:
+    bands : ['VIS', 'Y', 'J', 'H']
+    INCOLS : ['RIGHT_ASCENSION', 'DECLINATION', 'POINT_LIKE_PROB', 'POINT_LIKE_FLAG', 
+              'ELLIPTICITY', 'MUMAX_MINUS_MAG', 'SPURIOUS_FLAG', 'DET_QUALITY_FLAG', 'FWHM', 'SEGMENTATION_MAP_ID',
+              'FLUX_VIS_PSF', 'FLUXERR_VIS_PSF', 'FLAG_{band}', 'FLUX_{band}_2FWHM_APER', 'FLUXERR_{band}_2FWHM_APER']
+
+des_y6:
+    bands : 'grizy'
+    INCOLS : ['coadd_object_id', 'alphawin_j2000', 'deltawin_j2000', 'psf_mag_aper_8_{band}_corrected', 'psf_mag_err_aper_8_{band}', 
+              'flags_foreground', 'flags_footprint', 'flags_gold', 'ext_mash']
+
+lsst_dp1:
+    repo_config :
+        nersc : '/global/cfs/cdirs/lsst/production/gen3/rubin/DP1/repo/butler.yaml'
+    collection :
+        nersc : 'LSSTComCam/DP1'
+    instrument : 'LSSTComCam'
+    skymap : 'lsst_cells_v1'
+    tract_list : [453, 454, 4849, 5063, 4848, 2394, 2234, 4016, 4017, 4218, 4217, 5525, 5526, 7611, 7610, 7850, 10463, 10464, 10704]
+    tract2field_dict : {453: '47 Tuc',
+                        454: '47 Tuc',
+                        4849: 'ECDFS',
+                        5063: 'ECDFS',
+                        4848: 'ECDFS',
+                        2394: 'EDFS',
+                        2234: 'EDFS',
+                        4016: 'Fornax',
+                        4017: 'Fornax',
+                        4218: 'Fornax',
+                        4217: 'Fornax',
+                        5525: 'Rubin_SV_095-25',
+                        5526: 'Rubin_SV_095-25',
+                        7611: 'Seagull',
+                        7610: 'Seagull',
+                        7850: 'Seagull',
+                        10463: 'Rubin_SV_38_7',
+                        10464: 'Rubin_SV_38_7',
+                        10704: 'Rubin_SV_38_7'
+                        }
+    field2tract_dict : {'47 Tuc' : [453],
+                        '47 Tuc' : [454],
+                        'ECDFS' : [4849, 5063, 4848],
+                        'EDFS' : [2394, 2234],
+                        'Fornax' : [4016, 4017, 4218, 4217],
+                        'Rubin_SV_095-25' : [5525, 5526],
+                        'Seagull' : [7611, 7610, 7850],
+                        'Rubin_SV_38_7' : [10463, 10464, 10704]
+                        }
+    bands : 'griz'
+    # depending on which survey, our preferred star-galaxy separating columns will change
+    INCOLS : ['coord_ra', 'coord_dec', 'detect_isIsolated', '{band}_psfFlux', '{band}_cModelFlux', 
+              '{band}_cModelFluxErr', '{band}_psfFluxErr', 'refExtendedness', '{band}_extendedness',
+              '{band}_psfFlux_flag', '{band}_sizeExtendedness', '{band}_sizeExtendedness_flag']
+    s-g separator : '{band}_sizeExtendedness'
