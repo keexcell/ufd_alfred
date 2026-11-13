@@ -122,7 +122,7 @@ def search_by_distance(survey, Region, distance_modulus, iso_sel, extension=None
     n_model_peak_array = []
 
     Region.density = Region.characteristic_density(iso_sel, verbose=verbose)
-    x_peak_array, y_peak_array, angsep_peak_array, hist = Region.find_peaks(iso_sel, distance_modulus, survey, plot=plot)
+    x_peak_array, y_peak_array, angsep_peak_array, hist, hist_smooth = Region.find_peaks(iso_sel, distance_modulus, survey, plot=plot)
     for x_peak, y_peak, angsep_peak in zip(x_peak_array, y_peak_array, angsep_peak_array):
         # Aperture fitting
         if verbose: print('Fitting aperture to hotspot...')
@@ -151,4 +151,4 @@ def search_by_distance(survey, Region, distance_modulus, iso_sel, extension=None
 
     #added this line and changed return statement to return h_region
     results = np.asarray([ra_peak_array, dec_peak_array, r_peak_array, sig_peak_array, distance_modulus_array, n_obs_peak_array, n_obs_half_peak_array, n_model_peak_array])
-    return results, hist
+    return results, hist, hist_smooth

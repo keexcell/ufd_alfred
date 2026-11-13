@@ -2,6 +2,7 @@
 import os
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import numpy as np
 #astro specific
 from astropy.table import Table
 from astropy import units as u
@@ -234,7 +235,7 @@ class DESnEuclidData(DESData, EuclidData):
         
 
 class Peak():
-    def __init__(self, results_T, iso_starsData, iso, SearchRegion):
+    def __init__(self, results_T, hist, hist_smooth, iso_starsData, iso, SearchRegion):
         #results_T = ra_peak, dec_peak, r_peak, sig_peak, distance_modulus, n_obs_peak, n_obs_half_peak, n_model_peak
         self.ra = results_T[0]
         self.dec = results_T[1]
@@ -246,6 +247,8 @@ class Peak():
         self.n_obs = results_T[5]
         self.n_obs_half = results_T[6]
         self.n_model = results_T[7]
+        self.isofiltered_hist = hist
+        self.isofiltered_histsmooth = hist_smooth
         try:
             self.id = f'{round(self.sig,5)}_{round(self.ra,5)}_{round(self.dec,5)}_{int(self.distance)}'
         except:
@@ -277,7 +280,7 @@ class Peak():
             self.member_candidates = member_candidates
         return member_candidates
         
-    def diagnostic_plots(self, iso_background_stars, all_background_stars,
+    def diagnostic_plots(self, iso_background_stars, all_background_stars, background_r, Region,
                          plots_dir, data_dir, 
                          n_plots = 6, preload=True, save=True, cutouts=True):
         '''
@@ -293,28 +296,28 @@ class Peak():
         mem_candidates = self.member_candidates
         if type(mem_candidates)==Data:
             plotting_functions.isochrone_plot([self.iso], {
-                'Stars fit isochrone + within 0.5 deg' : (iso_background_stars.VIS,iso_background_stars.Y),
-                'All stars within 0.5 deg' : (all_background_stars.VIS,all_background_stars.Y)
+                f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.VIS,iso_background_stars.Y),'markers':[5,'k']},
+                f'All stars within {background_r} deg' : {'data':(all_background_stars.VIS,all_background_stars.Y),'markers':'hist'}
                                                           },
                                               title = "No member stars",
                                               legend=True, x_lim = (-3, 3), y_lim = (26,16),
                                               save = False, ax = ax1)
         else:
             plotting_functions.isochrone_plot([self.iso], {
-                'All stars within 0.5 deg' : (all_background_stars.VIS,all_background_stars.Y),
-                'Stars fit isochrone + within 0.5 deg' : (iso_background_stars.VIS,iso_background_stars.Y),
-                'Stars fit isochrone + within 1.2*radius deg' : (mem_candidates.VIS, mem_candidates.Y),
+                f'All stars within {background_r} deg' : {'data':(all_background_stars.VIS,all_background_stars.Y),'markers':'hist'},
+                f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.VIS,iso_background_stars.Y),'markers':[5,'k']},
+                'Stars fit isochrone + within 1.2*radius deg' : {'data':(mem_candidates.VIS, mem_candidates.Y),'markers':[10,'r']}
                                                           },
                                               legend=True, x_lim = (-3, 3), y_lim = (26,16),
                                               save = False, ax = ax1)
 
         # scatterplot of the stars, radius, center, etc
         #plotting_functions.candidate_scatterplot(self, ax = fig.add_subplot(spec[0,1]),legend=True)
+        iso_background_stars.label = f'isochrone stars within {background_r} deg'
+        all_background_stars.label = f'all stars within {background_r} deg'
         plotting_functions.candidates_v_background(self, iso_background_stars, ax=fig.add_subplot(spec[0,1]),legend=True)
-        
-        iso_background_stars.label = 'isochrone stars within 0.5 deg'
-        all_background_stars.label = 'all stars within 0.5 deg'
-        plotting_functions.density_v_r(self, [iso_background_stars, all_background_stars], ax=fig.add_subplot(spec[0,2]),legend=True, mode='circle')
+        plotting_functions.candidates_v_smoothbackground(self, Region, ax=fig.add_subplot(spec[0,2]),legend=True)
+        plotting_functions.density_v_r(self, [iso_background_stars, all_background_stars], ax=fig.add_subplot(spec[1,0]),legend=True, mode='circle')
 
         names = self.iso_stars.survey.lower()
 
@@ -346,7 +349,7 @@ class Peak():
                             plotting_functions.saveEuclidCutout(euclid_file, self.ra, self.dec, 
                                                                 cutout_radius = r)
                             plotting_functions.plotCutout(euclid_file, euclid_name.replace('_',' ').upper(), Peak=self,
-                                                  legend=False,subplot=spec[1,0],fig=fig)
+                                                  legend=False,subplot=spec[1,1],fig=fig)
                             break
                         except:
                             continue
@@ -354,13 +357,15 @@ class Peak():
                     else:
                         print(f'Check tells me to NOT download Euclid image for {r}arcsec')
                         plotting_functions.plotCutout(euclid_file, euclid_name.replace('_',' ').upper(), Peak=self,
-                                                  legend=False,subplot=spec[1,0],fig=fig)
+                                                  legend=False,subplot=spec[1,1],fig=fig)
                         break
-            if des_name is not None:
+            try:
                 #this cutout radius is in deg
                 des_file_path = plotting_functions.saveDESCutout(self.ra, self.dec, radius = 0.1)
                 plotting_functions.plotCutout(des_file_path, des_name.upper(), Peak=self,
-                                              flip_x=True,subplot=spec[1,1],fig=fig)
+                                              flip_x=True,subplot=spec[1,2],fig=fig)
+            except:
+                pass
 
             ## eventually add LSST cutout
         
@@ -376,28 +381,40 @@ class Peak():
     
 #Below methods are to help with formatting things~~~~~~~~~~~~~~~~~~~~~~~
     def make_list(self):
+        if len(self.samesig_duplicates)!=0:
+            distance = [peak['distance'] for peak in self.samesig_duplicates]
+            dist_mod = [peak['distance modulus'] for peak in self.samesig_duplicates]
+        else:
+            distance = [self.distance]
+            distance = [self.distance_modulus]
         values_list = [self.id, self.ra, self.dec, 
                        self.r, self.sig, 
-                       self.distance, self.distance_modulus, 
+                       distance, distance_modulus, 
                        self.n_obs, self.n_obs_half, self.n_model]
         return values_list
 
     def make_tuple(self):
-        return self.id, self.ra, self.dec, self.r, self.sig, self.distance, self.distance_modulus, self.n_obs, self.n_obs_half, self.n_model
+        if len(self.samesig_duplicates)!=0:
+            distance = [peak['distance'] for peak in self.samesig_duplicates]
+            distance_modulus = [peak['distance modulus'] for peak in self.samesig_duplicates]
+        else:
+            distance = [self.distance]
+            distance_modulus = [self.distance_modulus]
+        return self.id, self.ra, self.dec, self.r, self.sig, f'{distance}', f'{distance_modulus}', self.n_obs, self.n_obs_half, self.n_model
         
     def list_labels(self, return_type = 'tuple'):
         if return_type == 'tuple':
-            labels = ('peak id', 'ra','dec','r','sig','distance','distance modulus', 'n obs', 'n obs half', 'n model')
+            labels = ('peak_id', 'ra','dec','r','sig','distance','distance_modulus', 'n_obs', 'n_obs_half', 'n_model')
         elif return_type == 'list':
-            labels = ['peak id','ra','dec','r','sig','distance','distance modulus', 'n obs', 'n obs half', 'n model']
+            labels = ['peak_id', 'ra','dec','r','sig','distance','distance_modulus', 'n_obs', 'n_obs_half', 'n_model']
         elif return_type == 'tuple units':
-            labels = ('peak id','ra [deg]','dec [deg]','r [deg]','sig','distance [kpc]','distance modulus [mag]', 'n obs', 'n obs half', 'n model')
+            labels = ('peak_id','ra_deg','dec_deg','r_deg','sig','distance_kpc','distance_modulus', 'n_obs', 'n_obs_half', 'n_model')
         elif return_type == 'list units':
-            labels = ['peak id','ra [deg]','dec [deg]','r [deg]','sig','distance [kpc]','distance modulus [mag]', 'n obs', 'n obs half', 'n model']
+            labels = ['peak_id','ra_deg','dec_deg','r_deg','sig','distance_kpc','distance_modulus', 'n_obs', 'n_obs_half', 'n_model']
         elif return_type == 'tuple units dtype':
-            labels = (('peak id',str),('ra [deg]','f8'),('dec [deg]','f8'),('r [deg]','f8'),('sig','f8'),('distance [kpc]','f8'),('distance modulus [mag]','f8'), ('n obs','f8'), ('n obs half','f8'), ('n model','f8'))
+            labels = (('peak_id',str),('ra_deg','f8'),('dec_deg','f8'),('r_deg','f8'),('sig','f8'),('distance_kpc','U'),('distance_modulus','U'), ('n_obs','f8'), ('n_obs_half','f8'), ('n_model','f8'))
         elif return_type == 'list units dtype':
-            labels = [('peak id',str),('ra [deg]','f8'),('dec [deg]','f8'),('r [deg]','f8'),('sig','f8'),('distance [kpc]','f8'),('distance modulus [mag]','f8'), ('n obs','f8'), ('n obs half','f8'), ('n model','f8')]
+            labels = [('peak_id',str),('ra_deg','f8'),('dec_deg','f8'),('r_deg','f8'),('sig','f8'),('distance_kpc','U'),('distance_modulus','U'), ('n_obs','f8'), ('n_obs_half','f8'), ('n_model','f8')]
         else:
             print('only tuple or list supported')
         return labels

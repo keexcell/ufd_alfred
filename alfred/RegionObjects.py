@@ -1,22 +1,18 @@
+#standard
 import yaml
 import os
-from astropy.table import Table,vstack
-import healpy as hp
-from astropy.coordinates import SkyCoord
-from astropy import units as u
 import numpy as np
 import gc
 import scipy
 import matplotlib.pyplot as plt
-
-from alfred import utils, DataObjects
-
-#I really need to fix that I'm importing a git repo of updated astroquery
-    #maybe github submodules or enforcing a version of astroquery
-    #I think it's version 0.4.11 or 10?
-#idk if this is standard or astro specific
+#astro specific
+from astropy.table import Table,vstack
+import healpy as hp
+from astropy.coordinates import SkyCoord
+from astropy import units as u
 from pyvo.dal.tap import TAPService
 #project specific
+from alfred import utils, DataObjects
 from ugali.utils import healpix
 import ugali.utils.projector as projector
 
@@ -30,10 +26,12 @@ with open('config.yaml', 'r') as ymlfile:
         repo_config = cfg[opt_survey]['repo_config'][where]
         collection = cfg[opt_survey]['collection'][where]
     home_dir = os.path.expandvars(cfg['setup']['home_dir'][where])
-    data_dir = os.path.join(home_dir, cfg['setup']['data_dir'])
-    if not os.path.exists(data_dir):
-        os.mkdir(data_dir)
-    plots_dir = os.path.join(home_dir, cfg['output']['plots_dir'])
+    pckg_dir = os.path.expandvars(cfg['setup']['pckg_dir'])
+    data_dir = os.path.expandvars(cfg['setup']['data_dir'][where])
+    output_dir =  os.path.expandvars(cfg['output']['output_dir'])
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    plots_dir = os.path.join(output_dir, cfg['output']['plots_dir'])
     if not os.path.exists(plots_dir):
         os.mkdir(plots_dir)
 
@@ -48,6 +46,7 @@ class Region():
             pixel = healpix.ang2pix(nside, ra_og, dec_og)
         ra_center,dec_center = healpix.pix2ang(nside, pixel)
         self.pixel = pixel
+        self.index = 0
         self.pix_center = pixel
         self.coord_center = (ra_center, dec_center)
         phi = healpix.lon2phi(ra_center)
@@ -59,6 +58,8 @@ class Region():
         self.corners = hp.vec2ang(hp.boundaries(nside, pixel, step=1, nest=False).T, lonlat=True)
                 #corners is of the format (ra_arr, dec_arr)
         self.buffer_corners = None
+        self.radius = hp.pixelfunc.max_pixrad(nside, degrees=True)
+        self.buffer_radius = self.radius*1.1
 
         #getting these overlapping regions for data querying purposes
         self.rubin_tracts = -1
@@ -72,15 +73,21 @@ class Region():
         input a Data Object that has an ra and dec attribute, needs to be in degrees, and apply_mask method
         '''
         if buffer==True:
-            try:
-                #get pixels in buffer region
-                vec_arr = healpix.ang2vec(self.buffer_corners[0], self.buffer_corners[1])
-                ra_postvec, dec_postvec = hp.vec2ang(vec_arr)
-                subpix = hp.query_polygon(finer_nside,vec_arr,inclusive=True)
-            except ValueError:
-                print("Buffer region probably not run yet, so it's still set to None")
+            radius = self.buffer_radius
         else:
-            subpix = healpix.subpixel(self.pixel, self.nside, finer_nside)
+            radius = self.radius
+            #try:
+            #    #get pixels in buffer region
+            #    vec_arr = healpix.ang2vec(self.buffer_corners[0], self.buffer_corners[1])
+            #    ra_postvec, dec_postvec = hp.vec2ang(vec_arr)
+            #    subpix = hp.query_polygon(finer_nside,vec_arr,inclusive=True)
+            #except ValueError:
+            #    print("Buffer region probably not run yet, so it's still set to None")
+        #else:
+        #    subpix = healpix.subpixel(self.pixel, self.nside, finer_nside)
+        center_coord = self.coord_center
+        vec = hp.pixelfunc.ang2vec(center_coord[0], center_coord[1], lonlat=True)
+        subpix = hp.query_disc(finer_nside, vec, radius, inclusive=True)
         datapix = healpix.ang2pix(finer_nside, Data.ra, Data.dec)
         mask = np.isin(datapix, subpix)
         regionData = Data.apply_mask(mask)
@@ -135,7 +142,8 @@ class Region():
             return ra_arr, dec_arr
         else:
             print('Type not supported by region_borders function. Please input string, list of tuples, or SkyCoord list')
-            return None        
+            return None
+
         
     def get_rubin_tracts(self, butler, finer_nside=4096, buffer=True):
         '''
@@ -199,38 +207,47 @@ class Region():
             might be False if you want to overwrite the data
         either way, this assigns the data to self.euclid_data and self.data['euclid survey'] 
         '''
-        if not os.path.exists(data_dir + f'/{ir_survey}'):
-            print("no Euclid data folder, making one now")
-            os.mkdir(data_dir + f'/{ir_survey}')
-
         pixel_datashard = healpix.superpixel(self.pixel, self.nside, nside_datashard)
-        file_dir = data_dir + f'/{ir_survey}/{nside_datashard}_{pixel_datashard}_euclid.parquet'
-        if not utils.check_if_query(file_dir, preload):
+        file_name = data_dir + '/' + f'{nside_datashard}_{pixel_datashard}_euclid.parquet'
+                    #new_file_dir = data_dir + f'/{ir_survey}'
+        if not utils.check_if_query(file_name, preload):
             print(f'''Check tells me Euclid data exists for nside = {nside_datashard}, pixel = {pixel_datashard}, 
-                      and you don't want to overwrite. Opening existing file now''')
-            results_table = Table.read(file_dir)
+                        and you don't want to overwrite. Opening existing file now''')
+            results_table = Table.read(file_name, format='parquet')
         else:
             print(f'''Check tells me Euclid data doesn't exist for nside = {nside_datashard}, pixel = {pixel_datashard} 
-                      or you do want to overwrite, querying now''')
-            from astroquery_updated.esa.euclid import Euclid
+                        or you do want to overwrite, querying now''')
+            from astroquery.esa.euclid import Euclid
             Euclid.get_status_messages()
-            
-            query = f'SELECT {INCOLS} FROM mer_catalogue'
-            radius = 1.7 #going for bigger than a tract
-            #query += f''' WHERE DISTANCE({self.center.ra.value}, {self.center.dec.value},
-            #                            right_ascension, declination) < {radius}'''
-            #query += f''' WHERE CONTAINS(POINT('ICRS', RIGHT_ASCENSION, DECLINATION),
-            #             POLYGON('ICRS', {self.region_borders(return_type='string',step=step)})) = 1'''
-            ra_arr, dec_arr = self.region_borders(return_type='coord-separated list',step=step,buffer=buffer)
-            query += f''' WHERE right_ascension BETWEEN {np.min(ra_arr)} AND {np.max(ra_arr)}
-                        AND declination BETWEEN {np.min(dec_arr)} AND {np.max(dec_arr)}'''
-    
-            results_table = Euclid.launch_job_async(query, verbose=False).get_results()
-            results_table.write(file_dir, format='parquet', overwrite = True)
-        
+                
+            if buffer==True:
+                radius = self.buffer_radius
+            else:
+                radius = self.radius
+            #coord  = SkyCoord(ra=self.coord_center[0]*u.deg, dec=self.coord_center[1]*u.deg, frame='icrs')
+            #u_radius = u.Quantity(radius, u.deg)
+            catalogs = ['dr1.mer_catalogue_wide_survey','dr1.mer_catalogue_deep_survey']
+            for catalog in catalogs:
+                query = f'SELECT {INCOLS} FROM {catalog}'
+                query += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
+                                            RIGHT_ASCENSION, DECLINATION) < {radius}'''
+                print(query)
+            #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
+                        #this should default to the mer_catalogue, if wanting to specify table use table_name=''
+                try:
+                    job = Euclid.launch_job_async(query, verbose=False)
+                    results_table = job.get_results()
+                except:
+                    continue
+                if len(results_table)!=0:
+                    break
+            new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
+            new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
+            results_table.write(new_file_dir, format='parquet', overwrite = True)
+
         #storing it as the euclid object so we have access to attributes
         results = DataObjects.EuclidData(results_table, ir_survey)
-        results = self.region_cut(results, finer_nside = 4096,buffer=buffer)
+        #results = self.region_cut(results, finer_nside = 4096,buffer=buffer)
         self.data_dict[ir_survey] = results
         
         return results
@@ -439,7 +456,7 @@ class Region():
         h = np.histogram2d(x, y, bins=[bins, bins])[0]
 
         h_g = scipy.ndimage.filters.gaussian_filter(h, smoothing / delta_x)
-
+        
         # SM: If we can speed up this block that would be great
         factor_array = np.arange(1, 5., 0.05)
         rara, decdec = self.proj.imageToSphere(xx.flatten(), yy.flatten())
@@ -501,7 +518,7 @@ class Region():
             fig.savefig(plots_dir + f'/{survey}_nside{self.nside}_pixel{self.pixel}/{round(distance)}kpc_region_histogram.png', bbox_inches='tight')
             plt.close()
         
-        return x_peak_array, y_peak_array, angsep_peak_array, h_g
+        return x_peak_array, y_peak_array, angsep_peak_array, h, h_g
     
     def fit_aperture(self, iso_sel, x_peak, y_peak, angsep_peak, distance_modulus, survey, verbose=True, plot=False,extension=None):
         """

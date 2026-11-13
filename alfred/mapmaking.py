@@ -23,9 +23,9 @@ with open('config.yaml', 'r') as ymlfile:
     where = cfg['setup']['where']
     home_dir = os.path.expandvars(cfg['setup']['home_dir'][where])
     #external data is gonna be in a directory above - subject to change
-    data_dir = os.path.join(home_dir, cfg['setup']['data_dir'])
-    if not os.path.exists(data_dir+'/maps'):
-        os.mkdir(data_dir+'/maps')
+    data_dir = os.path.expandvars(cfg['setup']['data_dir'][where])
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
     
     opt_survey = cfg['opt_survey']
     if 'lsst' in opt_survey:
@@ -107,20 +107,22 @@ def euclid_fullmap(map_name, band, simple_name, survey, preload=True):
     simple_name : str, name of the map for the file (i.e. coverage or footprint)
     preload = True means that I want to use the preloaded / saved data instead of querying again
     '''
+    if not os.path.exists(data_dir+'/maps'):
+        os.mkdir(data_dir+'/maps')
     full_map_path = data_dir + f'/maps/full_{simple_name}_{band.lower()}_{survey}.fits'
     query_check = utils.check_if_query(full_map_path, preload)
     if not query_check:
         print("Check tells me map exists and you don't want to overwrite. Opening map")
         full_map = hsp.HealSparseMap.read(full_map_path)
     if query_check:
-        from astroquery_updated.esa.euclid import Euclid
+        from astroquery.esa.euclid import Euclid
         print("Check tells me map doesn't exists or you want to overwrite. Making map now")
         map_table = euclid_map_query(map_name)
 
         tiles = [tile_list[0] for tile_list in np.unique(map_table['tile_index_list'])]
         map_list = []
         for tile in tiles:
-            output_path = data_path + f'/{tile}_{simple_name}_{band}_{euclid_survey}.fits'
+            output_path = data_dir +'/maps/' + f'/{tile}_{simple_name}_{band}_{euclid_survey}.fits'
             i = np.where((map_table['tile_index_list']==[tile]) & (map_table['filter_name']==band))[0][0]
             path = Euclid.get_product(file_name=map_table['file_name_list'][i], product_id = map_table['product_id'][i], 
                                           output_file= output_path, verbose=False)
@@ -145,7 +147,9 @@ def euclid_tilemap(tile_id, map_name, band, simple_name, preload=True):
     simple_name : str, name of the map for the file (i.e. coverage or footprint)
     preload = True means that I want to use the preloaded / saved data instead of querying again
     '''
-    tile_map_path = data_path + f'/{tile}_{simple_name}_{band}_{euclid_survey}.fits'
+    if not os.path.exists(data_dir+'/maps'):
+        os.mkdir(data_dir+'/maps')
+    tile_map_path = data_dir + f'/maps/{tile}_{simple_name}_{band}_{euclid_survey}.fits'
     query_check = utils.check_if_query(tile_map_path,preload)
     if not query_check:
         print("Check tells me map exists and you don't want to overwrite. Opening map")

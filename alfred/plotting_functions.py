@@ -38,7 +38,10 @@ try:
         # assuming that it's cool that the whole github repo is considered "home"
         where = cfg['setup']['where']
         home_dir = os.path.expandvars(cfg['setup']['home_dir'][where])
-        plots_dir = os.path.join(home_dir, cfg['output']['plots_dir'])
+        output_dir =  os.path.expandvars(cfg['output']['output_dir'])
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
+        plots_dir = os.path.join(output_dir, cfg['output']['plots_dir'])
         if not os.path.exists(plots_dir):
             os.mkdir(plots_dir)
         if not os.path.exists(plots_dir+'/isochrones'):
@@ -77,9 +80,10 @@ def candidates_v_background(Peak, background_stars, ax = None, legend=True, colo
         fig, ax = plt.subplots(figsize=(12, 8))
     x_lim = (Peak.ra-Peak.r*1.5, Peak.ra+Peak.r*1.5) #(np.min(background_stars.ra), np.max(background_stars.ra))
     y_lim = (Peak.dec-Peak.r*1.5, Peak.dec+Peak.r*1.5) #(np.min(background_stars.dec), np.max(background_stars.dec))
-    h = ax.hist2d(background_stars.ra, background_stars.dec, cmap='viridis', alpha=0.5, bins=50, 
+    h = ax.hist2d(background_stars.ra, background_stars.dec, label = background_stars.label, 
+                    cmap='viridis', alpha=0.5, bins=50, 
                   range = [[x_lim[0],x_lim[1]],[y_lim[0], y_lim[1]]])
-    if type(Peak.member_candidates)==DataObjects.DESnEuclidData:
+    if type(Peak.member_candidates)==type(background_stars):
         ax.scatter(Peak.member_candidates.ra, Peak.member_candidates.dec,
                    s=50, facecolors='none', edgecolors='r',
                    label='Candidate member stars')
@@ -96,6 +100,23 @@ def candidates_v_background(Peak, background_stars, ax = None, legend=True, colo
         cbar = plt.colorbar(h[3],ax=ax)
     if ax is None:
     	plt.close()
+
+def candidates_v_smoothbackground(Peak, Region, ax = None, legend=True, colorbar = True, width=0.0002):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 8))
+    x, y = Region.proj.sphereToImage(Peak.ra, Peak.dec)
+    h_smooth = Peak.isofiltered_histsmooth
+    delta_x = 0.01
+    bins = np.arange(-8., 8. + 1.e-10, delta_x)
+    h = ax.imshow(h_smooth.T, extent=[bins[0], bins[-1], bins[0], bins[-1]], origin='lower', label='Smoothed isochrone filtered stellar density')
+    ax.scatter(x, y, marker='x', color='r', label='Peak center')
+    if legend==True:
+        ax.legend(loc='upper right')
+    if colorbar==True:
+        cbar = plt.colorbar(h[3],ax=ax)
+    if ax is None:
+    	plt.close()
+
 
 
 def saveDESCutout(ra, dec, radius=0.1, band='i'):
@@ -175,7 +196,7 @@ def saveEuclidCutout(output_file, ra, dec, cutout_radius=120):
     SELECT 
     file_name, file_path, datalabs_path, instrument_name, filter_name, ra, dec, creation_date, product_type, patch_id_list, tile_index 
     FROM 
-    q1.mosaic_product 
+    dr1.mosaic_product 
     WHERE 
     instrument_name='VIS' AND INTERSECTS(CIRCLE({ra}, {dec}, {radius}), fov)=1 
     ORDER BY 
@@ -332,6 +353,7 @@ def density_v_r(Peak, stars_to_plot, mode = 'circle', ax=None, legend=True):
         fig, ax = plt.subplots(1,1)
         
     radii = np.linspace(0.015,0.5,50)
+    y_max = 0
     for starsData in stars_to_plot+['uniform']:
         if starsData=='uniform':
             angsep = uniform_angsep
@@ -354,6 +376,8 @@ def density_v_r(Peak, stars_to_plot, mode = 'circle', ax=None, legend=True):
             density.append(sum_within / area)
 
         density_prob = utils.normalize_array(density,radii)
+        if np.max(density_prob)>y_max:
+            y_max=np.max(density_prob)
         if starsData=='uniform':
             ax.plot(radii, density_prob, label = 'uniform density test', c='k', ls='-')
         else:
@@ -361,7 +385,7 @@ def density_v_r(Peak, stars_to_plot, mode = 'circle', ax=None, legend=True):
         
     ax.plot(np.linspace(aper_r,aper_r,10), np.linspace(0,30,10),
             c='k', ls='--', alpha=0.5, label='radius of the peak aperature')
-    ax.set(xlabel = 'radius (deg)', ylabel= 'normalized density = stars/area')
+    ax.set(xlabel = 'radius (deg)', ylabel= 'normalized density = stars/area', xlim=(0,aper_r*3), ylim=(0,y_max))
     if legend==True:
         ax.legend()
     
@@ -389,7 +413,7 @@ def map_plot(hsp_map, title, color_lims = (24,26),
 #~~~~~~~~~~START ISOCHRONE FUNCTION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def isochrone_plot(iso_list, stars_band_dict,
                    title = '', legend = True, colorbar = True,
-                   x_lim = (-1, 4), y_lim = (28,18),
+                   x_lim = (-1, 4), y_lim = (28,18), diagnostic=True,
                    save = True, filename = 'isochrone_cmd',
                    ax=None):
     '''
@@ -424,7 +448,7 @@ def isochrone_plot(iso_list, stars_band_dict,
     
     if len(stars_band_dict.keys()) == 1:
         label = list(stars_band_dict.keys())[0]
-        band1, band2 = stars_band_dict[label]
+        band1, band2 = stars_band_dict[label]['data']
         h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=200,
                       cmin=1, cmap = 'plasma', label = label, alpha = 0.7,
                       range = [[x_lim[0],x_lim[1]],[y_lim[1], y_lim[0]]])
@@ -434,17 +458,21 @@ def isochrone_plot(iso_list, stars_band_dict,
                xlim = x_lim, ylim = y_lim, title = title)
         
     else:
-        color = ['0.8', 'C0', 'C3']
-        i=0
         for label in stars_band_dict.keys():
-            band1, band2 = stars_band_dict[label]
-            ax.scatter(band1.mag - band2.mag, band1.mag,
-                       s=10, c = color[i], alpha = 1,
-                       label = label)
-            if i == 0:
+            band1, band2 = stars_band_dict[label]['data']
+            markers = stars_band_dict[label]['markers']
+            if markers=='hist':
+                h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=200,
+                      cmin=1, cmap = 'Greys', label = label, alpha = 0.5,
+                      range = [[x_lim[0],x_lim[1]],[y_lim[1], y_lim[0]]])
+                if colorbar==True:
+                    plt.colorbar(h[3], ax=ax, label= 'Stellar Sample Number Counts')
+            else:
+                ax.scatter(band1.mag - band2.mag, band1.mag,
+                        s=markers[0], c = markers[1], alpha = 1,
+                        label = label)
                 ax.set(xlabel = f'{band1.str} - {band2.str}', ylabel = f'{band1.str}',
                        xlim = x_lim, ylim = y_lim, title = title)
-            i+=1
         
     ls = ['-', '--', ':']
     for i in range(len(iso_list)):

@@ -1,0 +1,19 @@
+
+shell = ./euclid_search.sh $(NSIDE) $(PIX)
+
+log = job_logs/test_$(Cluster)_$(Process).log
+error = job_logs/test_$(Cluster)_$(Process).err
+output = job_logs/test_$(Cluster)_$(Process).out
+
+# +IsBuildJob = True
+
+transfer_input_files = euclid_search.sh, ufd_alfred.tar.gz
+transfer_output_remaps = "output.tar.gz = /home/kexcell/outputs/output_$(Cluster)_$(NewProcess).tar.gz; $(NSIDE)_$(PIX)_euclid.parquet = osdf:///chtc/staging/k/kexcell/euclid_dr1/$(NSIDE)_$(PIX)_euclid.parquet"
+container_image = dwarf_search_container.sif
+
+request_cpus = 1
+request_memory = 10GB
+request_disk = 10GB
+
+# which jobs to run
+queue NSIDE, PIX from ALL_euclid_dr1_ring_pixels.txt

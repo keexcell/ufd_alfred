@@ -1,27 +1,34 @@
 setup : #user input
-  where : 'nersc' #usdf or nersc or rsp
+  where : 'chtc' #chtc or usdf or nersc or rsp
   home_dir :  #path where I want everything to save
+    chtc : '$HOME'
     nersc : '$HOME/ufd_alfred'
     usdf : '$HOME/rubin-user/ufd_alfred'
     rsp : '$HOME/ufd_alfred'
-  pckg_dir : 'alfred' #path to the package
-  data_dir : 'external_data' #path to the external data needed (maps, euclid data, etc)
+  pckg_dir : '$HOME/ufd_alfred' #path to the package
+  data_dir :
+    chtc : '$HOME'
+    nersc : '$HOME/external_data' #path to the external data needed (maps, euclid data, etc)
+  valid_pixel_table : 'RINGeuclid_dr1_valid_pixels.csv'
+
 output:
-  results_dir : 'results'
+  output_dir : '$HOME/output'
+  results_dir : ''
   plots_dir : 'plots'
 
 nside_shards : 32
-nside_search : 64
+nside_search : 32
 
 #change with new data releases
-opt_survey : 'lsst_dp2' #or 'lsst_dp1', 'lsst_dp2', or 'des_y6'
-ir_survey : 'euclid_q1' #or 'euclid dr1' or eventually 'roman'
+opt_survey : 'no_opt' #or 'lsst_dp1', 'lsst_dp2', or 'des_y6'
+ir_survey : 'euclid_dr1' #or 'euclid dr1' or eventually 'roman'
 
 lsst_dp2:
     repo_config :
         nersc : 'dp2'
         usdf : 'dp2_prep'
         rsp : 'dp2'
+        chtc : None
     collection :
         nersc : 'dp2'
         usdf : ['LSSTCam/runs/DRP/DP2/v30_0_0/DM-53881/stage1',
@@ -29,6 +36,7 @@ lsst_dp2:
                 'LSSTCam/runs/DRP/DP2/v30_0_6_rc1/DM-53881/stage3',
                 'LSSTCam/runs/DRP/DP2/v30_0_0/DM-53881/stage4']
         rsp : 'dp2'
+        chtc : None
     instrument : 'LSSTCam'
     skymap : 'lsst_cells_v2'
     #tract_list :
@@ -56,6 +64,13 @@ euclid_q1:
     INCOLS : ['RIGHT_ASCENSION', 'DECLINATION', 'POINT_LIKE_PROB', 'POINT_LIKE_FLAG', 
               'ELLIPTICITY', 'MUMAX_MINUS_MAG', 'SPURIOUS_FLAG', 'DET_QUALITY_FLAG', 'FWHM', 'SEGMENTATION_MAP_ID',
               'FLUX_VIS_PSF', 'FLUXERR_VIS_PSF', 'FLAG_{band}', 'FLUX_{band}_2FWHM_APER', 'FLUXERR_{band}_2FWHM_APER']
+
+euclid_dr1:
+    bands : ['VIS', 'Y', 'J', 'H']
+    INCOLS : ['RIGHT_ASCENSION', 'DECLINATION', 'POINT_LIKE_PROB', 'POINT_LIKE_FLAG', 
+              'ELLIPTICITY', 'MUMAX_MINUS_MAG', 'SPURIOUS_FLAG', 'DET_QUALITY_FLAG', 'FWHM', 'SEGMENTATION_MAP_ID',
+              'FLUX_VIS_PSF', 'FLUXERR_VIS_PSF', 'FLAG_{band}', 'FLUX_{band}_2FWHM_APER', 'FLUXERR_{band}_2FWHM_APER']
+
 
 des_y6:
     bands : 'grizy'
