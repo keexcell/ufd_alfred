@@ -300,7 +300,8 @@ class Peak():
                 f'All stars within {background_r} deg' : {'data':(all_background_stars.VIS,all_background_stars.Y),'markers':'hist'}
                                                           },
                                               title = "No member stars",
-                                              legend=True, x_lim = (-3, 3), y_lim = (26,16),
+                                              legend=True, colorbar=True,
+                                              x_lim = (-3, 3), y_lim = (26,16),
                                               save = False, ax = ax1)
         else:
             plotting_functions.isochrone_plot([self.iso], {
@@ -308,7 +309,8 @@ class Peak():
                 f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.VIS,iso_background_stars.Y),'markers':[5,'k']},
                 'Stars fit isochrone + within 1.2*radius deg' : {'data':(mem_candidates.VIS, mem_candidates.Y),'markers':[10,'r']}
                                                           },
-                                              legend=True, x_lim = (-3, 3), y_lim = (26,16),
+                                              legend=True, colorbar=True,
+                                              x_lim = (-3, 3), y_lim = (26,16),
                                               save = False, ax = ax1)
 
         # scatterplot of the stars, radius, center, etc

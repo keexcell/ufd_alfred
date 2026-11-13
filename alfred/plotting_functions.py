@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from matplotlib.patches import Circle, Annulus
+from matplotlib.patches import Circle, Annulus, Patch
 # astro specific
 from pyvo.dal import sia
 from astropy.utils.data import download_file
@@ -80,7 +80,7 @@ def candidates_v_background(Peak, background_stars, ax = None, legend=True, colo
         fig, ax = plt.subplots(figsize=(12, 8))
     x_lim = (Peak.ra-Peak.r*1.5, Peak.ra+Peak.r*1.5) #(np.min(background_stars.ra), np.max(background_stars.ra))
     y_lim = (Peak.dec-Peak.r*1.5, Peak.dec+Peak.r*1.5) #(np.min(background_stars.dec), np.max(background_stars.dec))
-    h = ax.hist2d(background_stars.ra, background_stars.dec, label = background_stars.label, 
+    h = ax.hist2d(background_stars.ra, background_stars.dec, 
                     cmap='viridis', alpha=0.5, bins=50, 
                   range = [[x_lim[0],x_lim[1]],[y_lim[0], y_lim[1]]])
     if type(Peak.member_candidates)==type(background_stars):
@@ -97,7 +97,7 @@ def candidates_v_background(Peak, background_stars, ax = None, legend=True, colo
     if legend==True:
         ax.legend(loc='upper right')
     if colorbar==True:
-        cbar = plt.colorbar(h[3],ax=ax)
+        cbar = plt.colorbar(h[3],ax=ax,label=background_stars.label)
     if ax is None:
     	plt.close()
 
@@ -108,12 +108,12 @@ def candidates_v_smoothbackground(Peak, Region, ax = None, legend=True, colorbar
     h_smooth = Peak.isofiltered_histsmooth
     delta_x = 0.01
     bins = np.arange(-8., 8. + 1.e-10, delta_x)
-    h = ax.imshow(h_smooth.T, extent=[bins[0], bins[-1], bins[0], bins[-1]], origin='lower', label='Smoothed isochrone filtered stellar density')
+    im = ax.imshow(h_smooth.T, extent=[bins[0], bins[-1], bins[0], bins[-1]], origin='lower', label='Smoothed isochrone filtered stellar density')
     ax.scatter(x, y, marker='x', color='r', label='Peak center')
     if legend==True:
         ax.legend(loc='upper right')
     if colorbar==True:
-        cbar = plt.colorbar(h[3],ax=ax)
+        cbar = plt.colorbar(im,ax=ax)
     if ax is None:
     	plt.close()
 
@@ -450,10 +450,10 @@ def isochrone_plot(iso_list, stars_band_dict,
         label = list(stars_band_dict.keys())[0]
         band1, band2 = stars_band_dict[label]['data']
         h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=200,
-                      cmin=1, cmap = 'plasma', label = label, alpha = 0.7,
+                      cmin=1, cmap = 'plasma', alpha = 0.7,
                       range = [[x_lim[0],x_lim[1]],[y_lim[1], y_lim[0]]])
         if colorbar==True:
-            plt.colorbar(h[3], ax=ax, label= 'Stellar Sample Number Counts')
+            plt.colorbar(h[3], ax=ax, label= label)
         ax.set(xlabel = f'{band1.str} - {band2.str}', ylabel = f'{band1.str}',
                xlim = x_lim, ylim = y_lim, title = title)
         
@@ -463,10 +463,10 @@ def isochrone_plot(iso_list, stars_band_dict,
             markers = stars_band_dict[label]['markers']
             if markers=='hist':
                 h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=200,
-                      cmin=1, cmap = 'Greys', label = label, alpha = 0.5,
+                      cmin=1, cmap = 'Greys', alpha = 0.5,
                       range = [[x_lim[0],x_lim[1]],[y_lim[1], y_lim[0]]])
                 if colorbar==True:
-                    plt.colorbar(h[3], ax=ax, label= 'Stellar Sample Number Counts')
+                    plt.colorbar(h[3], ax=ax, label= label)
             else:
                 ax.scatter(band1.mag - band2.mag, band1.mag,
                         s=markers[0], c = markers[1], alpha = 1,
