@@ -81,7 +81,7 @@ def candidates_v_background(Peak, background_stars, ax = None, legend=True, colo
     x_lim = (Peak.ra-Peak.r*1.5, Peak.ra+Peak.r*1.5) #(np.min(background_stars.ra), np.max(background_stars.ra))
     y_lim = (Peak.dec-Peak.r*1.5, Peak.dec+Peak.r*1.5) #(np.min(background_stars.dec), np.max(background_stars.dec))
     h = ax.hist2d(background_stars.ra, background_stars.dec, 
-                    cmap='viridis', alpha=0.5, bins=50, 
+                    cmap='viridis', alpha=0.5, bins=25, 
                   range = [[x_lim[0],x_lim[1]],[y_lim[0], y_lim[1]]])
     if type(Peak.member_candidates)==type(background_stars):
         ax.scatter(Peak.member_candidates.ra, Peak.member_candidates.dec,
@@ -108,12 +108,13 @@ def candidates_v_smoothbackground(Peak, Region, ax = None, legend=True, colorbar
     h_smooth = Peak.isofiltered_histsmooth
     delta_x = 0.01
     bins = np.arange(-8., 8. + 1.e-10, delta_x)
-    im = ax.imshow(h_smooth.T, extent=[bins[0], bins[-1], bins[0], bins[-1]], origin='lower', label='Smoothed isochrone filtered stellar density')
+    im = ax.imshow(h_smooth.T, extent=[bins[0], bins[-1], bins[0], bins[-1]], origin='lower')
     ax.scatter(x, y, marker='x', color='r', label='Peak center')
+    ax.set(xlim = (-1, 1), ylim = (-1,1))
     if legend==True:
         ax.legend(loc='upper right')
     if colorbar==True:
-        cbar = plt.colorbar(im,ax=ax)
+        cbar = plt.colorbar(im,ax=ax, label='Smoothed isochrone filtered stellar density')
     if ax is None:
     	plt.close()
 
@@ -385,7 +386,7 @@ def density_v_r(Peak, stars_to_plot, mode = 'circle', ax=None, legend=True):
         
     ax.plot(np.linspace(aper_r,aper_r,10), np.linspace(0,30,10),
             c='k', ls='--', alpha=0.5, label='radius of the peak aperature')
-    ax.set(xlabel = 'radius (deg)', ylabel= 'normalized density = stars/area', xlim=(0,aper_r*3), ylim=(0,y_max))
+    ax.set(xlabel = 'radius (deg)', ylabel= 'normalized density = stars/area', xlim=(0,aper_r*3), ylim=(0,y_max+5))
     if legend==True:
         ax.legend()
     

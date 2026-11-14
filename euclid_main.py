@@ -109,10 +109,10 @@ iso2 = isochrone.Isochrone(age=12.0, metallicity=0.0002,
                              distance_modulus=projector.distanceToDistanceModulus(900),
                              survey= 'mixed', band_1= 'Y', band_2= 'VIS')
 
-plotting_functions.isochrone_plot([iso1, iso2], {'_nolabel' : {'data':(Stars.Y, Stars.VIS),'markers':'hist'}},
+plotting_functions.isochrone_plot([iso1, iso2], {'Stellar Sample Number Counts' : {'data':(Stars.VIS, Stars.Y),'markers':'hist'}},
                                   title = 'Euclid only', legend = True, colorbar=False,
                                   x_lim = (-3, 3), y_lim = (26,16), 
-                                  save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.nside}_Y_VIS_{Stars.survey}')
+                                  save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.nside}_VIS_Y_{Stars.survey}')
 print('CMD isochrone plot ran and saved')
 
 
