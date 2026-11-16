@@ -44,8 +44,7 @@ try:
         plots_dir = os.path.join(output_dir, cfg['output']['plots_dir'])
         if not os.path.exists(plots_dir):
             os.mkdir(plots_dir)
-        if not os.path.exists(plots_dir+'/isochrones'):
-            os.mkdir(plots_dir+'/isochrones')
+
 except:
     print('No config file, this will mess up saving')
 
@@ -92,7 +91,7 @@ def candidates_v_background(Peak, background_stars, ax = None, legend=True, colo
                label=f'Peak center and radius outline')
     radius = Annulus((Peak.ra, Peak.dec),Peak.r, width, color='r')
     ax.add_artist(radius)
-    ax.set(xlabel='RA (deg)', ylabel='Dec (deg)')
+    ax.set(xlabel='RA (deg)', ylabel='Dec (deg)', title='Peak member candidates vs background stars')
     ax.invert_xaxis()
     if legend==True:
         ax.legend(loc='upper right')
@@ -110,7 +109,7 @@ def candidates_v_smoothbackground(Peak, Region, ax = None, legend=True, colorbar
     bins = np.arange(-8., 8. + 1.e-10, delta_x)
     im = ax.imshow(h_smooth.T, extent=[bins[0], bins[-1], bins[0], bins[-1]], origin='lower')
     ax.scatter(x, y, marker='x', color='r', label='Peak center')
-    ax.set(xlim = (-1, 1), ylim = (-1,1))
+    ax.set(xlim = (x-0.5,x+0.5), ylim = (y-0.5,y+0.5), title= 'Peak center on smoothed isochrone-filtered stellar density')
     if legend==True:
         ax.legend(loc='upper right')
     if colorbar==True:
@@ -187,12 +186,12 @@ def saveEuclidCutout(output_file, ra, dec, cutout_radius=120):
     -----
     Requires `astroquery.esa.euclid`, `astropy.coordinates.SkyCoord`, and `astropy.units`.
     """
-    from astroquery_updated.esa.euclid import Euclid
+    from astroquery.esa.euclid import Euclid
 
     coord = SkyCoord(ra=ra, dec=dec, unit='deg', frame='icrs')
     
     # Step 1: Query file paths
-    radius   = 0.5 / 60.
+    radius   = 0.3 / 60.
     query    = f"""
     SELECT 
     file_name, file_path, datalabs_path, instrument_name, filter_name, ra, dec, creation_date, product_type, patch_id_list, tile_index 
@@ -353,7 +352,7 @@ def density_v_r(Peak, stars_to_plot, mode = 'circle', ax=None, legend=True):
     if ax is None:
         fig, ax = plt.subplots(1,1)
         
-    radii = np.linspace(0.015,0.5,50)
+    radii = np.linspace(0.005,0.5,50)
     y_max = 0
     for starsData in stars_to_plot+['uniform']:
         if starsData=='uniform':
@@ -384,9 +383,9 @@ def density_v_r(Peak, stars_to_plot, mode = 'circle', ax=None, legend=True):
         else:
             ax.plot(radii, density_prob, label = starsData.label)
         
-    ax.plot(np.linspace(aper_r,aper_r,10), np.linspace(0,30,10),
+    ax.plot(np.linspace(aper_r,aper_r,10), np.linspace(0,y_max+5,10),
             c='k', ls='--', alpha=0.5, label='radius of the peak aperature')
-    ax.set(xlabel = 'radius (deg)', ylabel= 'normalized density = stars/area', xlim=(0,aper_r*3), ylim=(0,y_max+5))
+    ax.set(xlabel = 'radius (deg)', ylabel= 'normalized density = stars/area', xlim=(0,aper_r*4), ylim=(0,y_max+5))
     if legend==True:
         ax.legend()
     
@@ -450,7 +449,7 @@ def isochrone_plot(iso_list, stars_band_dict,
     if len(stars_band_dict.keys()) == 1:
         label = list(stars_band_dict.keys())[0]
         band1, band2 = stars_band_dict[label]['data']
-        h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=200,
+        h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=100,
                       cmin=1, cmap = 'plasma', alpha = 0.7,
                       range = [[x_lim[0],x_lim[1]],[y_lim[1], y_lim[0]]])
         if colorbar==True:
@@ -464,7 +463,7 @@ def isochrone_plot(iso_list, stars_band_dict,
             markers = stars_band_dict[label]['markers']
             if markers=='hist':
                 h = ax.hist2d(band1.mag - band2.mag, band1.mag, bins=200,
-                      cmin=1, cmap = 'Greys', alpha = 0.5,
+                      cmin=0, cmap = 'Greys', alpha = 0.5,
                       range = [[x_lim[0],x_lim[1]],[y_lim[1], y_lim[0]]])
                 if colorbar==True:
                     plt.colorbar(h[3], ax=ax, label= label)
@@ -491,9 +490,7 @@ def isochrone_plot(iso_list, stars_band_dict,
         ax.legend(loc='upper right')
 
     if save == True:
-        if not os.path.exists(plots_dir + f'/isochrones'):
-            os.mkdir(plots_dir + f'/isochrones')
-        plt.savefig(plots_dir + f'/isochrones/{filename}.png')
+        plt.savefig(plots_dir + f'/{filename}.png')
     if ax is None: 	
     	plt.close()
 

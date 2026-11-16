@@ -18,6 +18,8 @@ output:
 
 nside_shards : 32
 nside_search : 32
+iso_band1 : 'VIS'
+iso_band2 : 'Y'
 
 #change with new data releases
 opt_survey : 'no_opt' #or 'lsst_dp1', 'lsst_dp2', or 'des_y6'

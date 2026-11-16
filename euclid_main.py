@@ -16,6 +16,7 @@ from ugali.utils import projector
 import simple_adl.simple_adl.isochrone as isochrone
 from alfred import utils, DataObjects, RegionObjects, masks_and_filters, search_tools, plotting_functions, mapmaking
 
+print(sys.argv[1],sys.argv[2])
 nside_arg = int(sys.argv[1])
 pixel = int(sys.argv[2])
 
@@ -42,6 +43,8 @@ with open('config.yaml', 'r') as ymlfile:
 
     nside_shards = cfg['nside_shards']
     nside_search = nside_arg #cfg['nside_search']
+    iso_band1 = cfg['iso_band1']
+    iso_band2 = cfg['iso_band2']
 
     ir_survey = cfg['ir_survey']
     ir_INCOLS = cfg[ir_survey]['INCOLS']
@@ -97,6 +100,7 @@ Stars = type(Data)(stars_table_filled, survey=Data.survey)
 del Data
 gc.collect()
 
+Stars.iso_band_initialize(iso_band1, iso_band2)
 SearchRegion.data_dict['stellar catalog'] = Stars
 SearchRegion.data = Stars
 print('Stellar catalog made, ', len(Stars.data), ' stars found')
@@ -104,15 +108,15 @@ print('Stellar catalog made, ', len(Stars.data), ' stars found')
 ## plot CMD + isochrone for verification
 iso1 = isochrone.Isochrone(age=12.0, metallicity=0.0002,
                             distance_modulus=projector.distanceToDistanceModulus(50),
-                            survey= 'mixed', band_1= 'Y', band_2= 'VIS')
+                            survey= 'mixed', band_1= iso_band1, band_2= iso_band2)
 iso2 = isochrone.Isochrone(age=12.0, metallicity=0.0002,
                              distance_modulus=projector.distanceToDistanceModulus(900),
-                             survey= 'mixed', band_1= 'Y', band_2= 'VIS')
+                             survey= 'mixed', band_1= iso_band1, band_2= iso_band2)
 
-plotting_functions.isochrone_plot([iso1, iso2], {'Stellar Sample Number Counts' : {'data':(Stars.VIS, Stars.Y),'markers':'hist'}},
+plotting_functions.isochrone_plot([iso1, iso2], {'Stellar Sample Number Counts' : {'data':(Stars.band1, Stars.band2),'markers':'hist'}},
                                   title = 'Euclid only', legend = True, colorbar=False,
                                   x_lim = (-3, 3), y_lim = (26,16), 
-                                  save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.nside}_VIS_Y_{Stars.survey}')
+                                  save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.pixel}_VIS_Y_{Stars.survey}')
 print('CMD isochrone plot ran and saved')
 
 
@@ -124,7 +128,7 @@ Peaks = []
 for distance_modulus in distance_mod_array:
     print(f'Searching at d mod = {distance_modulus}')
     distance = projector.distanceModulusToDistance(distance_modulus)
-    iso_sel, iso_stars, iso = search_tools.isochrone_search(Stars.VIS, Stars.Y, 
+    iso_sel, iso_stars, iso = search_tools.isochrone_search(Stars.band1, Stars.band2, 
                                                        distance_modulus, Stars,
                                                        SearchRegion,
                                                        age=12.0, Z=0.0002, 
@@ -133,7 +137,7 @@ for distance_modulus in distance_mod_array:
 #     ## need fracdet eventually, but not prioritizing for now
     
     results, hist, hist_smooth = search_tools.search_by_distance(Stars.survey, SearchRegion, distance_modulus, iso_sel, 
-                                                    verbose = False, plot = False) 
+                                                    verbose = False, plot = False)
     
     one_peak_per_row = results.T
     peak_number = np.shape(one_peak_per_row)[0]
@@ -146,8 +150,10 @@ for distance_modulus in distance_mod_array:
         
 if len(Peaks)==0:
     print('No significant hotspots found.')
-    utils.write_peak_result(Peaks, results_dir+f'/{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.survey}')
-
+    nan_array = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
+    noPeak = DataObjects.Peak(nan_array, np.nan, np.nan, np.nan)
+    utils.write_peak_result(noPeak, results_dir+f'/EMPTY{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.survey}')
+    exit()
         
 # for overlapping peaks, save the one with higher sig
 print('Number of peaks before: ', len(Peaks))

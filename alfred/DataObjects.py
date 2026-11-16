@@ -134,7 +134,11 @@ class EuclidData(Data):
 
     def clean(self, flags, bands = None, fwhm_limit = 1.5):
         return masks_and_filters.clean_euclid(self.data, flags, bands = None, fwhm_limit = 1.5)
-        
+
+    def iso_band_initialize(iso_band1, iso_band2):
+        band_dict = {'VIS' : self.VIS, 'H' : self.H, 'Y' : self.Y, 'J' : self.J}
+        self.band1 = band_dict[iso_band1]
+        self.band2 = band_dict[iso_band2]
 
 class DESData(Data):
     def __init__(self, data, survey='',**kwargs):
@@ -173,6 +177,11 @@ class DESData(Data):
 
     def clean(self):
         return masks_and_filters.clean_des(self.data)
+    
+    def iso_band_initialize(iso_band1, iso_band2):
+        band_dict = {'g' : self.g, 'r' : self.r, 'i' : self.i, 'z' : self.z, 'y' : self.y}
+        self.band1 = band_dict[iso_band1]
+        self.band2 = band_dict[iso_band2]
 
 
 class LSSTnEuclidData(LSSTData, EuclidData):
@@ -203,6 +212,12 @@ class LSSTnEuclidData(LSSTData, EuclidData):
         mask &= masks_and_filters.clean_euclid(self.data,flags=euclid_flags,bands=euclid_bands,fwhm_limit=fwhm_limit)
         return mask
 
+    def iso_band_initialize(iso_band1, iso_band2):
+        band_dict = {'g' : self.g, 'r' : self.r, 'i' : self.i, 'z' : self.z, 'y' : self.y,
+                    'VIS' : self.VIS, 'Y' : self.Y, 'J' : self.J, 'H' : self.H}
+        self.band1 = band_dict[iso_band1]
+        self.band2 = band_dict[iso_band2]
+
 
 class DESnEuclidData(DESData, EuclidData):
     def __init__(self, merged_data, survey='', coord_choice='DES',**kwargs):
@@ -232,6 +247,11 @@ class DESnEuclidData(DESData, EuclidData):
         mask &= masks_and_filters.clean_euclid(self.data,flags=euclid_flags,bands=euclid_bands,fwhm_limit=fwhm_limit)
         return mask
 
+    def iso_band_initialize(iso_band1, iso_band2):
+        band_dict = {'g' : self.g, 'r' : self.r, 'i' : self.i, 'z' : self.z, 'y' : self.y,
+                    'VIS' : self.VIS, 'Y' : self.Y, 'J' : self.J, 'H' : self.H}
+        self.band1 = band_dict[iso_band1]
+        self.band2 = band_dict[iso_band2]
         
 
 class Peak():
@@ -296,8 +316,8 @@ class Peak():
         mem_candidates = self.member_candidates
         if type(mem_candidates)==Data:
             plotting_functions.isochrone_plot([self.iso], {
-                f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.VIS,iso_background_stars.Y),'markers':[5,'k']},
-                f'All stars within {background_r} deg' : {'data':(all_background_stars.VIS,all_background_stars.Y),'markers':'hist'}
+                f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.band1,iso_background_stars.band2),'markers':[5,'k']},
+                f'All stars within {background_r} deg' : {'data':(all_background_stars.band1,all_background_stars.band2),'markers':'hist'}
                                                           },
                                               title = "No member stars",
                                               legend=True, colorbar=True,
@@ -305,9 +325,9 @@ class Peak():
                                               save = False, ax = ax1)
         else:
             plotting_functions.isochrone_plot([self.iso], {
-                f'All stars within {background_r} deg' : {'data':(all_background_stars.VIS,all_background_stars.Y),'markers':'hist'},
-                f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.VIS,iso_background_stars.Y),'markers':[5,'k']},
-                'Stars fit isochrone + within 1.2*radius deg' : {'data':(mem_candidates.VIS, mem_candidates.Y),'markers':[10,'r']}
+                f'All stars within {background_r} deg' : {'data':(all_background_stars.band1,all_background_stars.band2),'markers':'hist'},
+                f'Stars fit isochrone + within {background_r} deg' : {'data':(iso_background_stars.band1,iso_background_stars.band2),'markers':[5,'k']},
+                'Stars fit isochrone + within 1.2*radius deg' : {'data':(mem_candidates.band1, mem_candidates.band2),'markers':[10,'r']}
                                                           },
                                               legend=True, colorbar=True,
                                               x_lim = (-3, 3), y_lim = (26,16),
@@ -317,50 +337,34 @@ class Peak():
         #plotting_functions.candidate_scatterplot(self, ax = fig.add_subplot(spec[0,1]),legend=True)
         iso_background_stars.label = f'isochrone stars within {background_r} deg'
         all_background_stars.label = f'all stars within {background_r} deg'
-        plotting_functions.candidates_v_background(self, iso_background_stars, ax=fig.add_subplot(spec[0,1]),legend=True)
+        plotting_functions.candidates_v_background(self, all_background_stars, ax=fig.add_subplot(spec[0,1]),legend=True)
         plotting_functions.candidates_v_smoothbackground(self, Region, ax=fig.add_subplot(spec[0,2]),legend=True)
         plotting_functions.density_v_r(self, [iso_background_stars, all_background_stars], ax=fig.add_subplot(spec[1,0]),legend=True, mode='circle')
 
-        names = self.iso_stars.survey.lower()
-
         if cutouts==True:
-            parts = names.split('_')
-            try:
-                euclid_name = parts[parts.index('euclid')] + '_' + parts[parts.index('euclid')+1]
-                euclid_pixel_dir = data_dir + '/' + euclid_name + f'/nside{self.region.nside}_pixel{self.region.pixel}'
-                if not os.path.exists(euclid_pixel_dir):
-                    os.mkdir(euclid_pixel_dir)
-            except:
-                euclid_name = None
-            try:
-                des_name = parts[parts.index('des')] + ' ' + parts[parts.index('des')+1]
-            except:
-                des_name = None
-            
+     
             cutout_radius_deg = 0.05
             cutout_radius_arcsec = cutout_radius_deg*3600 #r in deg, convert to arcsec
 
-            if euclid_name is not None:
-                cutout_radii = [cutout_radius_arcsec, 120, 60] # this cutout radius is in arcsec
-                euclid_file_base = euclid_pixel_dir + f'/{self.ra}_{self.dec}'
-                for r in cutout_radii:
-                    euclid_file = euclid_file_base + f'_{r}arcsec'
-                    if utils.check_if_query(euclid_file, preload)==True:
-                        print(f'Check tells me to download Euclid image for {r}arcsec')
-                        try:
-                            plotting_functions.saveEuclidCutout(euclid_file, self.ra, self.dec, 
-                                                                cutout_radius = r)
-                            plotting_functions.plotCutout(euclid_file, euclid_name.replace('_',' ').upper(), Peak=self,
-                                                  legend=False,subplot=spec[1,1],fig=fig)
-                            break
-                        except:
-                            continue
-                        
-                    else:
-                        print(f'Check tells me to NOT download Euclid image for {r}arcsec')
+            cutout_radii = [cutout_radius_arcsec, 120, 60] # this cutout radius is in arcsec
+            euclid_file_base = f'{self.ra}_{self.dec}'
+            for r in cutout_radii:
+                euclid_file = euclid_file_base + f'_{r}arcsec'
+                if utils.check_if_query(euclid_file, preload)==True:
+                    print(f'Check tells me to download Euclid image for {r}arcsec')
+                    try:
+                        plotting_functions.saveEuclidCutout(euclid_file, self.ra, self.dec, 
+                                                            cutout_radius = r)
                         plotting_functions.plotCutout(euclid_file, euclid_name.replace('_',' ').upper(), Peak=self,
-                                                  legend=False,subplot=spec[1,1],fig=fig)
+                                                legend=False,subplot=spec[1,1],fig=fig)
                         break
+                    except:
+                        continue    
+                else:
+                    print(f'Check tells me to NOT download Euclid image for {r}arcsec')
+                    plotting_functions.plotCutout(euclid_file, euclid_name.replace('_',' ').upper(), Peak=self,
+                                                legend=False,subplot=spec[1,1],fig=fig)
+                    break
             try:
                 #this cutout radius is in deg
                 des_file_path = plotting_functions.saveDESCutout(self.ra, self.dec, radius = 0.1)
@@ -374,7 +378,7 @@ class Peak():
         fig.suptitle(f"Peak at {round(self.ra,2)},{round(self.dec,2)} deg, r = {round(self.r,2)} deg, dist mod = {round(self.distance_modulus,2)} ({int(self.distance)} kpc), {round(self.sig,2)} sigma", y=1, fontsize=12)
         fig.tight_layout()
         if save == True:
-            save_dir = plots_dir + f'/{names}_nside{self.region.nside}_pixel{self.region.pixel}'
+            save_dir = plots_dir + f'/nside{self.region.nside}_pixel{self.region.pixel}'
             if not os.path.exists(save_dir):
                 os.mkdir(save_dir)
             fig.savefig(save_dir + f'/diagnostic_{self.id}.png',dpi=300, bbox_inches = "tight")

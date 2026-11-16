@@ -238,6 +238,7 @@ class Region():
                     job = Euclid.launch_job_async(query, verbose=False)
                     results_table = job.get_results()
                 except:
+                    results_table = Table()
                     continue
                 if len(results_table)!=0:
                     break

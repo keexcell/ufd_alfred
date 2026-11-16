@@ -151,4 +151,5 @@ def search_by_distance(survey, Region, distance_modulus, iso_sel, extension=None
 
     #added this line and changed return statement to return h_region
     results = np.asarray([ra_peak_array, dec_peak_array, r_peak_array, sig_peak_array, distance_modulus_array, n_obs_peak_array, n_obs_half_peak_array, n_model_peak_array])
+    print(type(results), type(hist), type(hist_smooth))
     return results, hist, hist_smooth
