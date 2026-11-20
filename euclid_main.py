@@ -16,7 +16,7 @@ from ugali.utils import projector
 import simple_adl.simple_adl.isochrone as isochrone
 from alfred import utils, DataObjects, RegionObjects, masks_and_filters, search_tools, plotting_functions, mapmaking
 
-print(sys.argv[1],sys.argv[2])
+print(sys.argv[1],sys.argv[2],sys.argv[3])
 nside_arg = int(sys.argv[1])
 pixel = int(sys.argv[2])
 
@@ -40,16 +40,19 @@ with open('config.yaml', 'r') as ymlfile:
     plots_dir = os.path.join(output_dir, cfg['output']['plots_dir'])
     if not os.path.exists(plots_dir):
         os.mkdir(plots_dir)
-
+    
     nside_shards = cfg['nside_shards']
     nside_search = nside_arg #cfg['nside_search']
     iso_band1 = cfg['iso_band1']
-    iso_band2 = cfg['iso_band2']
+    iso_band2 = str(sys.argv[3])#cfg['iso_band2']
 
     ir_survey = cfg['ir_survey']
     ir_INCOLS = cfg[ir_survey]['INCOLS']
     ir_bands = cfg[ir_survey]['bands']
-
+#save duplicates diagnostic plot
+save_dir = plots_dir + f'/{ir_survey}_nside{nside_search}_pixel{pixel}'
+if not os.path.exists(save_dir):
+    os.mkdir(save_dir)
 
 ## Define Which Area We're Looking At -- by nside and by coordinate
 #coord = (53.16, -28.10) #just using ECDFS center for now
@@ -66,8 +69,11 @@ SearchRegion = RegionObjects.Region(nside_search, location)
 if 'euclid' in ir_survey: # I suppose I'll still keep it general for Roman?
     INCOLS = utils.columns_to_query(ir_INCOLS, ir_bands, output_type = 'string')
     IRData_raw = SearchRegion.euclid_query(INCOLS, preload = True, nside_datashard=nside_shards)
-    print(IRData_raw.data.colnames)
-    print(f'Data queried, {len(IRData_raw.data)} objects found. Starting cleaning')
+    if IRData_raw is None:
+        print('No objects found. Ending search prematurely. Look at data for debugging.')
+        utils.write_peak_result([], results_dir+f'/EMPTY{SearchRegion.nside}_{SearchRegion.pixel}_{ir_survey}')
+        exit()
+print(f'Data queried, {len(IRData_raw.data)} objects found. Starting cleaning')
 
 snr_mask = masks_and_filters.clean_snr(IRData_raw.VIS.mag, IRData_raw.VIS.magerr, 3)
     # Q: which flags should I enforce?
@@ -90,17 +96,13 @@ stars_mask = morphology_mask & point_like_prob_mask
 stars_table = Data.data[stars_mask]
 if len(stars_table)==0:
     print('No stars found. Ending search prematurely. Look at data for debugging.')
-    nan_array = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
-    noPeak = DataObjects.Peak(nan_array, np.nan, np.nan, np.nan)
-    utils.write_peak_result(noPeak, results_dir+f'/EMPTY{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.survey}')
+    utils.write_peak_result([], results_dir+f'/EMPTY{SearchRegion.nside}_{SearchRegion.pixel}_{Data.survey}')
     exit()
-
 stars_table_filled = utils.handle_ma_arr(stars_table, solution='fill')
-Stars = type(Data)(stars_table_filled, survey=Data.survey)
+Stars = type(Data)(stars_table_filled, iso_band1, iso_band2, Data.mode, survey=Data.survey)
 del Data
 gc.collect()
 
-Stars.iso_band_initialize(iso_band1, iso_band2)
 SearchRegion.data_dict['stellar catalog'] = Stars
 SearchRegion.data = Stars
 print('Stellar catalog made, ', len(Stars.data), ' stars found')
@@ -116,13 +118,18 @@ iso2 = isochrone.Isochrone(age=12.0, metallicity=0.0002,
 plotting_functions.isochrone_plot([iso1, iso2], {'Stellar Sample Number Counts' : {'data':(Stars.band1, Stars.band2),'markers':'hist'}},
                                   title = 'Euclid only', legend = True, colorbar=False,
                                   x_lim = (-3, 3), y_lim = (26,16), 
-                                  save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.pixel}_VIS_Y_{Stars.survey}')
+                                  save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.band1.str}_{Stars.band2.str}_{Stars.survey}')
 print('CMD isochrone plot ran and saved')
+
+fig, ax = plt.subplots(1,1, figsize=(5,5))
+ax.hist2d(Stars.ra, Stars.dec)
+ax.scatter(65.10,-32.83)
+plt.savefig(save_dir + '/histogram.png')
 
 
 ## hotspot search
 #distance_array = np.arange(50,3000,50) #distance is given in kpc
-distance_mod_array = np.arange(17, 29, .5)
+distance_mod_array = np.arange(17, 27, .25)
 Peaks = []
 
 for distance_modulus in distance_mod_array:
@@ -136,8 +143,12 @@ for distance_modulus in distance_mod_array:
 
 #     ## need fracdet eventually, but not prioritizing for now
     
-    results, hist, hist_smooth = search_tools.search_by_distance(Stars.survey, SearchRegion, distance_modulus, iso_sel, 
+    search_output = search_tools.search_by_distance(Stars.survey, SearchRegion, distance_modulus, iso_sel, 
                                                     verbose = False, plot = False)
+    try:
+        results, hist, hist_smooth = search_output
+    except:
+        print(search_output)
     
     one_peak_per_row = results.T
     peak_number = np.shape(one_peak_per_row)[0]
@@ -146,13 +157,15 @@ for distance_modulus in distance_mod_array:
     for i in range(peak_number):
         #ra_peak, dec_peak, r_peak, sig_peak, distance_modulus, n_obs_peak, n_obs_half_peak, n_model_peak = results_transpose[i]
         Peak_i = DataObjects.Peak(one_peak_per_row[i], hist, hist_smooth, iso_stars, iso, SearchRegion)
-        Peaks.append(Peak_i)
+        stars_within_radius = Peak_i.stars_within_the_radius(scale=1.2, set_attr = True)
+        if len(stars_within_radius.data)<=1:
+            continue
+        else:
+            Peaks.append(Peak_i)
         
 if len(Peaks)==0:
     print('No significant hotspots found.')
-    nan_array = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
-    noPeak = DataObjects.Peak(nan_array, np.nan, np.nan, np.nan)
-    utils.write_peak_result(noPeak, results_dir+f'/EMPTY{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.survey}')
+    utils.write_peak_result([], results_dir+f'/NOPEAK{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.survey}')
     exit()
         
 # for overlapping peaks, save the one with higher sig
@@ -197,8 +210,7 @@ for Peak in Peaks:
     ax[1].add_artist(radius)
     ax[1].scatter(Peak.ra, Peak.dec, s=1, c='r')
     ax[1].set_title('after')
-#save duplicates diagnostic plot
-save_dir = plots_dir + f'/{ir_survey}_nside{SearchRegion.nside}_pixel{SearchRegion.pixel}'
+
 if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 plt.savefig(save_dir + '/peaks_duplicates_beforeafter.png')
@@ -210,14 +222,13 @@ for Peak in Peaks:
     print(f'{Peak.sig} sigma; (RA, Dec, d) = ({Peak.ra} deg, {Peak.dec} deg, {Peak.distance} kpc); r = {Peak.r} deg; mu = {Peak.distance_modulus} mag')
     print(Peak.samesig_duplicates)
     
-    stars_within_radius = Peak.stars_within_the_radius(scale=1.2, set_attr = True)
-    background_r = 0.1
+    background_r = 0.5
     iso_background_stars = Peak.stars_within_the_radius(starsData=Peak.iso_stars, r=background_r, set_attr = False)
     all_background_stars = Peak.stars_within_the_radius(starsData=Stars, r=background_r, set_attr = False)
 
     Peak.diagnostic_plots(iso_background_stars, all_background_stars, background_r, SearchRegion,
                           plots_dir, data_dir, 
-                          preload=False, save=True, cutouts=True)  
+                          preload=False, save=True, cutouts=False)  
 
     if len(stars_within_radius.data)<=1:
         #if type(stars_within_radius)==DataObjects.Data:

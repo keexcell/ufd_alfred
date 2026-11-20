@@ -6,7 +6,7 @@ import gc
 import scipy
 import matplotlib.pyplot as plt
 #astro specific
-from astropy.table import Table,vstack
+from astropy.table import Table,vstack,join
 import healpy as hp
 from astropy.coordinates import SkyCoord
 from astropy import units as u
@@ -34,6 +34,8 @@ with open('config.yaml', 'r') as ymlfile:
     plots_dir = os.path.join(output_dir, cfg['output']['plots_dir'])
     if not os.path.exists(plots_dir):
         os.mkdir(plots_dir)
+    iso_band1 = cfg['iso_band1']
+    iso_band2 = cfg['iso_band2']
 
 class Region():
     #for sharding data into large healpy pixel regions
@@ -213,7 +215,12 @@ class Region():
         if not utils.check_if_query(file_name, preload):
             print(f'''Check tells me Euclid data exists for nside = {nside_datashard}, pixel = {pixel_datashard}, 
                         and you don't want to overwrite. Opening existing file now''')
-            results_table = Table.read(file_name, format='parquet')
+            try:
+                results_table = Table.read(file_name, format='parquet')
+                print('Read table in')
+            except:
+                print('Failed to read table in')
+                return None
         else:
             print(f'''Check tells me Euclid data doesn't exist for nside = {nside_datashard}, pixel = {pixel_datashard} 
                         or you do want to overwrite, querying now''')
@@ -235,22 +242,39 @@ class Region():
             #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
                         #this should default to the mer_catalogue, if wanting to specify table use table_name=''
                 try:
-                    job = Euclid.launch_job_async(query, verbose=False)
+                    job = Euclid.launch_job_async(query, verbose=True)
                     results_table = job.get_results()
                 except:
                     results_table = Table()
-                    continue
                 if len(results_table)!=0:
+                    new_cols = ['RIGHT_ASCENSION', 'DECLINATION', 
+                                'FLUX_VIS_TO_Y_TEMPLFIT', 'FLUX_Y_TEMPLFIT', 'FLUXERR_VIS_TO_Y_TEMPLFIT', 'FLUXERR_Y_TEMPLFIT',
+                                'FLUX_VIS_TO_J_TEMPLFIT', 'FLUX_J_TEMPLFIT', 'FLUXERR_VIS_TO_J_TEMPLFIT', 'FLUXERR_J_TEMPLFIT',
+                                'FLUX_VIS_TO_H_TEMPLFIT', 'FLUX_H_TEMPLFIT', 'FLUXERR_VIS_TO_H_TEMPLFIT', 'FLUXERR_H_TEMPLFIT']
+                    query2 = f'SELECT {','.join(new_cols)} FROM {catalog}'
+                    query2 += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
+                                            RIGHT_ASCENSION, DECLINATION) < {radius}'''
+                    print(query2)
+                    job = Euclid.launch_job_async(query2, verbose=True)
+                    results_table2 = job.get_results()
+                    join(results_table, results_table2)
                     break
-            new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
-            new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
-            results_table.write(new_file_dir, format='parquet', overwrite = True)
 
+
+            if len(results_table)!=0:
+                new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
+                new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
+                results_table.write(new_file_dir, format='parquet', overwrite = True)
+
+        if len(results_table)==0:
+            print('Length of results was 0')
+            return None
         #storing it as the euclid object so we have access to attributes
-        results = DataObjects.EuclidData(results_table, ir_survey)
+        results_table.rename_columns(results_table.colnames, [name.upper() for name in results_table.colnames])
+        print(len(results_table), results_table.colnames)
+        results = DataObjects.EuclidData(results_table, iso_band1, iso_band2, 2, survey=ir_survey)
         #results = self.region_cut(results, finer_nside = 4096,buffer=buffer)
         self.data_dict[ir_survey] = results
-        
         return results
 
     def des_query(self, INCOLS, preload = True, nside_datashard = 32, step=1, buffer=True):
@@ -434,7 +458,7 @@ class Region():
     
         return(characteristic_density_local)
 
-    def find_peaks(self, iso_sel, distance_modulus, survey, plot=False):
+    def find_peaks(self, iso_sel, distance_modulus, survey, ra_dec_override = None, plot=False):
         """
         Convolve field to find characteristic density and peaks within the selected pixel
         """
@@ -495,6 +519,15 @@ class Region():
             x_peak_array.append(x_peak)
             y_peak_array.append(y_peak)
             angsep_peak_array.append(angsep_peak)
+        print(ra_dec_override)
+        if ra_dec_override is not None:
+            ra,dec = ra_dec_override
+            x_peak, y_peak = self.proj.sphereToImage(ra, dec)
+            angsep_peak = np.sqrt((x-x_peak)**2 + (y-y_peak)**2)
+            x_peak_array.append(x_peak)
+            y_peak_array.append(y_peak)
+            angsep_peak_array.append(angsep_peak)
+            print('Eri VI override added')
 
         if plot==True:
             #print(np.shape(h_region), type(h_region[0][0]), h_region[0][0])

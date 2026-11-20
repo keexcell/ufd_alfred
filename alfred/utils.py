@@ -85,7 +85,9 @@ def handle_ma_arr(astropyTable, solution='fill'):
 
 def write_peak_result(Peaks_struct, file_path, save_format='ascii.ecsv'):
     if len(Peaks_struct)==0:
-        PeakTable = peak_list2table([DataObjects.Peak(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan)])
+        nan_array = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
+        noPeak = [DataObjects.Peak(nan_array, np.nan, np.nan, np.nan, np.nan, np.nan)]
+        PeakTable = peak_list2table(noPeak)
     elif type(Peaks_struct)==list:
         PeakTable = peak_list2table(Peaks_struct)
     else:

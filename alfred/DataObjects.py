@@ -85,7 +85,7 @@ class LSSTData(Data):
         return masks_and_filters.clean_lsst(self.data, bands)        
 
 class EuclidData(Data):
-    def __init__(self, data, survey='', **kwargs):
+    def __init__(self, data, isoband1, isoband2, mode, survey='', **kwargs):
         super().__init__(data, **kwargs)
         self.release = survey
         self.survey = survey #I realized release might be more confusing than survey? 
@@ -100,18 +100,35 @@ class EuclidData(Data):
         ## Euclid bands (flux given in mu_Jy)
         num = 2 #as suggested in Zerjal et al
         #convert fluxes to nJy, that's what the flux -> mag functions assume
-        self.VIS = Band(data[f'FLUX_VIS_2FWHM_APER']*(10**3),
-                        data[f'FLUXERR_VIS_2FWHM_APER']*(10**3),
-                        'VIS')
-        self.H = Band(data[f'FLUX_H_2FWHM_APER']*(10**3),
-                      data[f'FLUXERR_H_2FWHM_APER']*(10**3),
-                      'H')
-        self.Y = Band(data[f'FLUX_Y_2FWHM_APER']*(10**3),
-                      data[f'FLUXERR_Y_2FWHM_APER']*(10**3),
-                      'Y')
-        self.J = Band(data[f'FLUX_J_2FWHM_APER']*(10**3),
-                      data[f'FLUXERR_J_2FWHM_APER']*(10**3),
-                      'J')
+        self.mode = mode
+        if mode == 1:
+            self.VIS = Band(data[f'FLUX_VIS_TO_{isoband2}_TEMPLFIT']*(10**3),
+                            data[f'FLUXERR_VIS_TO_{isoband2}_TEMPLFIT']*(10**3),
+                            'VIS')
+                            #data[f'FLUX_VIS_2FWHM_APER']*(10**3), data[f'FLUXERR_VIS_2FWHM_APER']*(10**3)
+            self.H = Band(data[f'FLUX_H_TEMPLFIT']*(10**3),
+                        data[f'FLUXERR_H_TEMPLFIT']*(10**3),
+                        'H')
+            self.Y = Band(data[f'FLUX_Y_TEMPLFIT']*(10**3),
+                        data[f'FLUXERR_Y_TEMPLFIT']*(10**3),
+                        'Y')
+            self.J = Band(data[f'FLUX_J_TEMPLFIT']*(10**3),
+                        data[f'FLUXERR_J_TEMPLFIT']*(10**3),
+                        'J')
+        elif mode == 2:
+            self.VIS = Band(data[f'FLUX_VIS_2FWHM_APER']*(10**3),
+                            data[f'FLUXERR_VIS_2FWHM_APER']*(10**3),
+                            'VIS')
+                            #data[f'FLUX_VIS_2FWHM_APER']*(10**3), data[f'FLUXERR_VIS_2FWHM_APER']*(10**3)
+            self.H = Band(data[f'FLUX_H_2FWHM_APER']*(10**3),
+                        data[f'FLUXERR_H_2FWHM_APER']*(10**3),
+                        'H')
+            self.Y = Band(data[f'FLUX_Y_2FWHM_APER']*(10**3),
+                        data[f'FLUXERR_Y_2FWHM_APER']*(10**3),
+                        'Y')
+            self.J = Band(data[f'FLUX_J_2FWHM_APER']*(10**3),
+                        data[f'FLUXERR_J_2FWHM_APER']*(10**3),
+                        'J')
         #then because I have so many functions already defined, some retroactive definitions:
         self.VIS_mag = self.VIS.mag
         self.VIS_magerr = self.VIS.magerr
@@ -122,6 +139,10 @@ class EuclidData(Data):
         self.J_mag = self.J.mag
         self.J_magerr = self.J.magerr
 
+        band_dict = {'VIS' : self.VIS, 'H' : self.H, 'Y' : self.Y, 'J' : self.J}
+        self.band1 = band_dict[isoband1]
+        self.band2 = band_dict[isoband2]
+
         ## morphology
         self.pointlikeprob = data['POINT_LIKE_PROB']
         self.ellipticity = data['ELLIPTICITY']
@@ -130,15 +151,11 @@ class EuclidData(Data):
     def apply_mask(self, mask):
         ## takes in a mask, applies it to the df, then returns another Data object
         new_data = self.data[mask]
-        return EuclidData(new_data, self.survey)
+        return EuclidData(new_data, self.band1.str, self.band2.str, self.mode, survey=self.survey)
 
     def clean(self, flags, bands = None, fwhm_limit = 1.5):
         return masks_and_filters.clean_euclid(self.data, flags, bands = None, fwhm_limit = 1.5)
-
-    def iso_band_initialize(iso_band1, iso_band2):
-        band_dict = {'VIS' : self.VIS, 'H' : self.H, 'Y' : self.Y, 'J' : self.J}
-        self.band1 = band_dict[iso_band1]
-        self.band2 = band_dict[iso_band2]
+        
 
 class DESData(Data):
     def __init__(self, data, survey='',**kwargs):
@@ -178,11 +195,7 @@ class DESData(Data):
     def clean(self):
         return masks_and_filters.clean_des(self.data)
     
-    def iso_band_initialize(iso_band1, iso_band2):
-        band_dict = {'g' : self.g, 'r' : self.r, 'i' : self.i, 'z' : self.z, 'y' : self.y}
-        self.band1 = band_dict[iso_band1]
-        self.band2 = band_dict[iso_band2]
-
+        
 
 class LSSTnEuclidData(LSSTData, EuclidData):
     def __init__(self, merged_data, survey='', coord_choice='LSST', **kwargs):
@@ -212,7 +225,7 @@ class LSSTnEuclidData(LSSTData, EuclidData):
         mask &= masks_and_filters.clean_euclid(self.data,flags=euclid_flags,bands=euclid_bands,fwhm_limit=fwhm_limit)
         return mask
 
-    def iso_band_initialize(iso_band1, iso_band2):
+    def iso_band_initialize(self, iso_band1, iso_band2):
         band_dict = {'g' : self.g, 'r' : self.r, 'i' : self.i, 'z' : self.z, 'y' : self.y,
                     'VIS' : self.VIS, 'Y' : self.Y, 'J' : self.J, 'H' : self.H}
         self.band1 = band_dict[iso_band1]
@@ -247,7 +260,7 @@ class DESnEuclidData(DESData, EuclidData):
         mask &= masks_and_filters.clean_euclid(self.data,flags=euclid_flags,bands=euclid_bands,fwhm_limit=fwhm_limit)
         return mask
 
-    def iso_band_initialize(iso_band1, iso_band2):
+    def iso_band_initialize(self, iso_band1, iso_band2):
         band_dict = {'g' : self.g, 'r' : self.r, 'i' : self.i, 'z' : self.z, 'y' : self.y,
                     'VIS' : self.VIS, 'Y' : self.Y, 'J' : self.J, 'H' : self.H}
         self.band1 = band_dict[iso_band1]

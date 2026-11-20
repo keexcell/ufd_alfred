@@ -70,8 +70,8 @@ euclid_q1:
 euclid_dr1:
     bands : ['VIS', 'Y', 'J', 'H']
     INCOLS : ['RIGHT_ASCENSION', 'DECLINATION', 'POINT_LIKE_PROB', 'POINT_LIKE_FLAG', 
-              'ELLIPTICITY', 'MUMAX_MINUS_MAG', 'SPURIOUS_FLAG', 'DET_QUALITY_FLAG', 'FWHM', 'SEGMENTATION_MAP_ID',
-              'FLUX_VIS_PSF', 'FLUXERR_VIS_PSF', 'FLAG_{band}', 'FLUX_{band}_2FWHM_APER', 'FLUXERR_{band}_2FWHM_APER']
+              'ELLIPTICITY', 'MUMAX_MINUS_MAG', 'SPURIOUS_FLAG', 'DET_QUALITY_FLAG', 'FLAG_{band}', 
+              'FWHM', 'SEGMENTATION_MAP_ID', 'FLUX_{band}_2FWHM_APER', 'FLUXERR_{band}_2FWHM_APER']
 
 
 des_y6:

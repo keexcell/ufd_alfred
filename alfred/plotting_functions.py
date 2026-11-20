@@ -156,7 +156,7 @@ def saveDESCutout(ra, dec, radius=0.1, band='i'):
     else:
         return None
 
-def saveEuclidCutout(output_file, ra, dec, cutout_radius=120):
+def saveEuclidCutout(output_file, ra, dec, cutout_radius=120, method='ESA'):
     # https://astroquery.readthedocs.io/en/latest/esa/euclid/euclid.html#mer-cutouts
     """
     Retrieves a FITS image cutout from the Euclid Q1 VIS mosaic for a specific coordinate.
@@ -186,24 +186,26 @@ def saveEuclidCutout(output_file, ra, dec, cutout_radius=120):
     -----
     Requires `astroquery.esa.euclid`, `astropy.coordinates.SkyCoord`, and `astropy.units`.
     """
-    from astroquery.esa.euclid import Euclid
 
     coord = SkyCoord(ra=ra, dec=dec, unit='deg', frame='icrs')
     
-    # Step 1: Query file paths
-    radius   = 0.3 / 60.
-    query    = f"""
-    SELECT 
-    file_name, file_path, datalabs_path, instrument_name, filter_name, ra, dec, creation_date, product_type, patch_id_list, tile_index 
-    FROM 
-    dr1.mosaic_product 
-    WHERE 
-    instrument_name='VIS' AND INTERSECTS(CIRCLE({ra}, {dec}, {radius}), fov)=1 
-    ORDER BY 
-    file_name
-    """
-    print('starting query')
-    results = Euclid.launch_job_async(query).get_results()
+    if method=='ESA':
+        from astroquery.esa.euclid import Euclid
+        # Step 1: Query file paths
+        radius   = 0.5 / 60.
+        query    = f"""
+        SELECT 
+        file_name, file_path, datalabs_path, instrument_name, filter_name, ra, dec, creation_date, product_type, patch_id_list, tile_index 
+        FROM 
+        dr1.mosaic_product 
+        WHERE 
+        instrument_name='VIS' AND INTERSECTS(CIRCLE({ra}, {dec}, {radius}), fov)=1 
+        ORDER BY 
+        file_name
+        """
+        print('starting query')
+        results = Euclid.launch_job_async(query, verbose=True).get_results()
+    
     print(len(results))
     if len(results) > 1:
         #breakpoint()
