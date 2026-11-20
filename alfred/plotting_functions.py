@@ -221,7 +221,7 @@ def saveEuclidCutout(output_file, ra, dec, cutout_radius=120, method='ESA'):
     else:
         print("Expected 1 file and got %i files"%(len(results)))
         return None
-
+    print(file_path)
     # Step 2: Get cutout
     cutout_radius = cutout_radius * u.arcsec
     Euclid.get_cutout(

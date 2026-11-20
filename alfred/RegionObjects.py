@@ -233,46 +233,65 @@ class Region():
                 radius = self.radius
             #coord  = SkyCoord(ra=self.coord_center[0]*u.deg, dec=self.coord_center[1]*u.deg, frame='icrs')
             #u_radius = u.Quantity(radius, u.deg)
-            catalogs = ['dr1.mer_catalogue_wide_survey','dr1.mer_catalogue_deep_survey']
-            for catalog in catalogs:
-                query = f'SELECT {INCOLS} FROM {catalog}'
-                query += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
-                                            RIGHT_ASCENSION, DECLINATION) < {radius}'''
-                print(query)
+            #catalogs = ['dr1.mer_catalogue_wide_survey','dr1.mer_catalogue_deep_survey']
+            #for catalog in catalogs:
+            query = f'SELECT {INCOLS} FROM dr1.mer_catalogue_wide_survey'
+            query += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
+                                        RIGHT_ASCENSION, DECLINATION) < {radius}'''
+            print(query)
             #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
                         #this should default to the mer_catalogue, if wanting to specify table use table_name=''
-                try:
-                    job = Euclid.launch_job_async(query, verbose=True)
-                    results_table = job.get_results()
-                except:
-                    results_table = Table()
-                if len(results_table)!=0:
-                    new_cols = ['RIGHT_ASCENSION', 'DECLINATION', 
-                                'FLUX_VIS_TO_Y_TEMPLFIT', 'FLUX_Y_TEMPLFIT', 'FLUXERR_VIS_TO_Y_TEMPLFIT', 'FLUXERR_Y_TEMPLFIT',
-                                'FLUX_VIS_TO_J_TEMPLFIT', 'FLUX_J_TEMPLFIT', 'FLUXERR_VIS_TO_J_TEMPLFIT', 'FLUXERR_J_TEMPLFIT',
-                                'FLUX_VIS_TO_H_TEMPLFIT', 'FLUX_H_TEMPLFIT', 'FLUXERR_VIS_TO_H_TEMPLFIT', 'FLUXERR_H_TEMPLFIT']
-                    query2 = f'SELECT {','.join(new_cols)} FROM {catalog}'
-                    query2 += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
-                                            RIGHT_ASCENSION, DECLINATION) < {radius}'''
-                    print(query2)
-                    job = Euclid.launch_job_async(query2, verbose=True)
-                    results_table2 = job.get_results()
-                    join(results_table, results_table2)
-                    break
-
-
-            if len(results_table)!=0:
-                new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
-                new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
-                results_table.write(new_file_dir, format='parquet', overwrite = True)
+                #try:
+            job = Euclid.launch_job_async(query, verbose=True)
+            results_table = job.get_results()
+                #    break
+                #except:
+                #    results_table = Table()
+                #    continue
 
         if len(results_table)==0:
             print('Length of results was 0')
             return None
+
+        if 'FLUX_Y_TEMPLFIT' not in results_table.colnames:
+            from astroquery.esa.euclid import Euclid
+            Euclid.get_status_messages()
+                
+            if buffer==True:
+                radius = self.buffer_radius
+            else:
+                radius = self.radius
+            print('need to fetch new flux columns')
+            new_cols = ['RIGHT_ASCENSION', 'DECLINATION', 
+                        'FLUX_VIS_TO_Y_TEMPLFIT', 'FLUX_Y_TEMPLFIT', 'FLUXERR_VIS_TO_Y_TEMPLFIT', 'FLUXERR_Y_TEMPLFIT',
+                        'FLUX_VIS_TO_J_TEMPLFIT', 'FLUX_J_TEMPLFIT', 'FLUXERR_VIS_TO_J_TEMPLFIT', 'FLUXERR_J_TEMPLFIT',
+                        'FLUX_VIS_TO_H_TEMPLFIT', 'FLUX_H_TEMPLFIT', 'FLUXERR_VIS_TO_H_TEMPLFIT', 'FLUXERR_H_TEMPLFIT']
+            #catalogs = ['dr1.mer_catalogue_wide_survey','dr1.mer_catalogue_deep_survey']
+            #for catalog in catalogs:
+            query2 = f'SELECT {','.join(new_cols)} FROM dr1.mer_catalogue_wide_survey'
+            query2 += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
+                                    RIGHT_ASCENSION, DECLINATION) < {radius}'''
+            print(query2)
+            #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
+                        #this should default to the mer_catalogue, if wanting to specify table use table_name=''
+                #try:
+            job = Euclid.launch_job_async(query2, verbose=True)
+            results_table2 = job.get_results()
+            results_table_all = join(results_table, results_table2)
+            new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
+            new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
+            results_table_all.write(new_file_dir, format='parquet', overwrite = True)
+                #    break
+                #except:
+                #    print('getting new columns failed')
+                #    continue
+        else:
+            results_table_all = results_table
+
         #storing it as the euclid object so we have access to attributes
-        results_table.rename_columns(results_table.colnames, [name.upper() for name in results_table.colnames])
-        print(len(results_table), results_table.colnames)
-        results = DataObjects.EuclidData(results_table, iso_band1, iso_band2, 2, survey=ir_survey)
+        results_table_all.rename_columns(results_table_all.colnames, [name.upper() for name in results_table_all.colnames])
+        print(len(results_table_all), results_table_all.colnames)
+        results = DataObjects.EuclidData(results_table_all, iso_band1, iso_band2, 1, survey=ir_survey)
         #results = self.region_cut(results, finer_nside = 4096,buffer=buffer)
         self.data_dict[ir_survey] = results
         return results
