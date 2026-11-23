@@ -68,30 +68,40 @@ SearchRegion = RegionObjects.Region(nside_search, location)
 
 if 'euclid' in ir_survey: # I suppose I'll still keep it general for Roman?
     INCOLS = utils.columns_to_query(ir_INCOLS, ir_bands, output_type = 'string')
-    IRData_raw = SearchRegion.euclid_query(INCOLS, preload = True, nside_datashard=nside_shards)
+    quality_cuts = 'SPURIOUS_FLAG=0 AND FWHM<=1.5 AND DET_QUALITY_FLAG IN (0, 8, 512)'
+    IRData_raw = SearchRegion.euclid_query(INCOLS, quality_cuts, preload = True, nside_datashard=nside_shards)
     if IRData_raw is None:
         print('No objects found. Ending search prematurely. Look at data for debugging.')
         utils.write_peak_result([], results_dir+f'/EMPTY{SearchRegion.nside}_{SearchRegion.pixel}_{ir_survey}')
         exit()
 print(f'Data queried, {len(IRData_raw.data)} objects found. Starting cleaning')
 
+fig, ax = plt.subplots(1,1, figsize=(5,5))
+ax.scatter(IRData_raw.ra, IRData_raw.dec, marker = 'o', c='b')
+ax.scatter(65.10,-32.83,c='r',marker='x')
+ax.set(title=f'Raw data')
+plt.savefig(save_dir + '/histogram.png')
+print('RA min, max = ', np.min(IRData_raw.ra), np.max(IRData_raw.ra))
+print('Dec min, max = ', np.min(IRData_raw.dec), np.max(IRData_raw.dec))
+
+
 snr_mask = masks_and_filters.clean_snr(IRData_raw.VIS.mag, IRData_raw.VIS.magerr, 3)
     # Q: which flags should I enforce?
     # 0=no flags, 8=source close to a border, 512=source within an extended object area
-flag_mask = IRData_raw.clean(flags=[0,8,512], bands = None, fwhm_limit = 1.5)
+#flag_mask = IRData_raw.clean(flags=[0,8,512], bands = None, fwhm_limit = 1.5)
 ## mix em together
-total_mask = snr_mask & flag_mask
+#total_mask = snr_mask & flag_mask
 ## clean up data
-Data = IRData_raw.apply_mask(total_mask)
+Data = IRData_raw.apply_mask(snr_mask)
 del IRData_raw
-gc.collect()
+#c.collect()
 SearchRegion.data_dict[ir_survey] = Data
 print('Data cleaned and stored', len(Data.data), ' objects left')
 
 ## Select for Stars -- Zerjal + point_like_prob Cuts
-morphology_mask = masks_and_filters.Zerjal_stars(Data)
-point_like_prob_mask = masks_and_filters.POINT_LIKE_PROB_stars(Data, 0.7)
-stars_mask = morphology_mask & point_like_prob_mask
+#morphology_mask = masks_and_filters.Zerjal_stars(Data)
+point_like_prob_mask = masks_and_filters.POINT_LIKE_PROB_stars(Data, 0.05)
+stars_mask = point_like_prob_mask #morphology_mask & 
 ## fill in the masked values with np.nan
 stars_table = Data.data[stars_mask]
 if len(stars_table)==0:
@@ -107,6 +117,14 @@ SearchRegion.data_dict['stellar catalog'] = Stars
 SearchRegion.data = Stars
 print('Stellar catalog made, ', len(Stars.data), ' stars found')
 
+fig, ax = plt.subplots(1,1, figsize=(5,5))
+ax.scatter(Stars.ra, Stars.dec, marker = 'o', c='b')
+ax.scatter(65.10,-32.83,c='r',marker='x')
+ax.set(title=f'Stars')
+plt.savefig(save_dir + '/stars_histogram.png')
+print('RA min, max = ', np.min(Stars.ra), np.max(Stars.ra))
+print('Dec min, max = ', np.min(Stars.dec), np.max(Stars.dec))
+
 ## plot CMD + isochrone for verification
 iso1 = isochrone.Isochrone(age=12.0, metallicity=0.0002,
                             distance_modulus=projector.distanceToDistanceModulus(50),
@@ -121,11 +139,7 @@ plotting_functions.isochrone_plot([iso1, iso2], {'Stellar Sample Number Counts' 
                                   save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.band1.str}_{Stars.band2.str}_{Stars.survey}')
 print('CMD isochrone plot ran and saved')
 
-fig, ax = plt.subplots(1,1, figsize=(5,5))
-ax.hist2d(Stars.ra, Stars.dec)
-ax.scatter(65.10,-32.83)
-plt.savefig(save_dir + '/histogram.png')
-
+exit()
 
 ## hotspot search
 #distance_array = np.arange(50,3000,50) #distance is given in kpc

@@ -6,7 +6,7 @@ import gc
 import scipy
 import matplotlib.pyplot as plt
 #astro specific
-from astropy.table import Table,vstack,join
+from astropy.table import Table,vstack,join,unique
 import healpy as hp
 from astropy.coordinates import SkyCoord
 from astropy import units as u
@@ -201,7 +201,7 @@ class Region():
         print('Rubin query done!')
         return rubinData
 
-    def euclid_query(self, INCOLS, preload = True, nside_datashard=32, step=1, buffer=True):
+    def euclid_query(self, INCOLS, quality_cuts, preload = True, nside_datashard=32, step=1, buffer=True):
         '''
         checks if the data already exists for that survey and nside/pixel. 
         if it does, we won't query again, if we query, this function saves the new queried data
@@ -237,22 +237,24 @@ class Region():
             #for catalog in catalogs:
             query = f'SELECT {INCOLS} FROM dr1.mer_catalogue_wide_survey'
             query += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
-                                        RIGHT_ASCENSION, DECLINATION) < {radius}'''
+                                RIGHT_ASCENSION, DECLINATION) < {radius} AND {quality_cuts}'''
             print(query)
             #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
                         #this should default to the mer_catalogue, if wanting to specify table use table_name=''
                 #try:
+            Euclid.ROW_LIMIT = -1
+            Euclid.login(credentials_file=home_dir+'/credentials.txt')
             job = Euclid.launch_job_async(query, verbose=True)
             results_table = job.get_results()
-                #    break
-                #except:
-                #    results_table = Table()
-                #    continue
+            # job_ids = [job.jobid for job in Euclid.list_async_jobs()]
+            # Euclid.remove_jobs(job_ids)
+            Euclid.logout()
 
         if len(results_table)==0:
             print('Length of results was 0')
             return None
 
+        #~~~~i suppose only if i'm using prequeried table but adding on other columns~~~~~~~~~~~~~~~~~~~~~~~
         if 'FLUX_Y_TEMPLFIT' not in results_table.colnames:
             from astroquery.esa.euclid import Euclid
             Euclid.get_status_messages()
@@ -270,31 +272,109 @@ class Region():
             #for catalog in catalogs:
             query2 = f'SELECT {','.join(new_cols)} FROM dr1.mer_catalogue_wide_survey'
             query2 += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
-                                    RIGHT_ASCENSION, DECLINATION) < {radius}'''
+                                    RIGHT_ASCENSION, DECLINATION) < {radius} AND {quality_cuts}'''
             print(query2)
             #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
                         #this should default to the mer_catalogue, if wanting to specify table use table_name=''
                 #try:
+            Euclid.ROW_LIMIT = -1
             job = Euclid.launch_job_async(query2, verbose=True)
             results_table2 = job.get_results()
-            results_table_all = join(results_table, results_table2)
+            results_table = join(results_table, results_table2)
             new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
             new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
-            results_table_all.write(new_file_dir, format='parquet', overwrite = True)
+            results_table.write(new_file_dir, format='parquet', overwrite = True)
                 #    break
                 #except:
                 #    print('getting new columns failed')
                 #    continue
-        else:
-            results_table_all = results_table
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         #storing it as the euclid object so we have access to attributes
-        results_table_all.rename_columns(results_table_all.colnames, [name.upper() for name in results_table_all.colnames])
-        print(len(results_table_all), results_table_all.colnames)
-        results = DataObjects.EuclidData(results_table_all, iso_band1, iso_band2, 1, survey=ir_survey)
+        results_table.rename_columns(results_table.colnames, [name.upper() for name in results_table.colnames])
+        print(len(results_table), results_table.colnames)
+        results = DataObjects.EuclidData(results_table, iso_band1, iso_band2, 1, survey=ir_survey)
         #results = self.region_cut(results, finer_nside = 4096,buffer=buffer)
         self.data_dict[ir_survey] = results
         return results
+
+
+    def euclid_query_512(self, INCOLS, quality_cuts, preload = True, nside_datashard=32, step=1, buffer=True):
+        '''
+        checks if the data already exists for that survey and nside/pixel. 
+        if it does, we won't query again, if we query, this function saves the new queried data
+            preload means "yes I want you to load the data if it exists"
+            might be False if you want to overwrite the data
+        either way, this assigns the data to self.euclid_data and self.data['euclid survey'] 
+        '''
+        pixel_datashard = healpix.superpixel(self.pixel, self.nside, nside_datashard)
+        file_name = data_dir + '/' + f'{nside_datashard}_{pixel_datashard}_euclid.parquet'
+                    #new_file_dir = data_dir + f'/{ir_survey}'
+        if not utils.check_if_query(file_name, preload):
+            print(f'''Check tells me Euclid data exists for nside = {nside_datashard}, pixel = {pixel_datashard}, 
+                        and you don't want to overwrite. Opening existing file now''')
+            try:
+                results_table = Table.read(file_name, format='parquet')
+                print('Read table in')
+            except:
+                print('Failed to read table in')
+                return None
+        else:
+            print(f'''Check tells me Euclid data doesn't exist for nside = {nside_datashard}, pixel = {pixel_datashard} 
+                        or you do want to overwrite, querying now''')
+            from astroquery.esa.euclid import Euclid
+            Euclid.get_status_messages()
+
+            if buffer==True:
+                large_radius = self.buffer_radius
+            else:
+                large_radius = self.radius
+            vec = hp.pixelfunc.ang2vec(self.coord_center[0], self.coord_center[1], lonlat=True)
+            pix_512_list = hp.query_disc(512, vec, large_radius, inclusive=False, nest=False)
+            sub_radius = hp.max_pixrad(512,degrees=True)
+
+            results = []
+            for pix in pix_512_list:
+                pix_ra_cen, pix_dec_cen = hp.pix2ang(512, pix, lonlat=True)
+                #INCOLS includes the TEMPLFIT columns and not the FWHM2APER columns
+                query = f'SELECT {INCOLS} FROM dr1.mer_catalogue_wide_survey'
+                query += f''' WHERE DISTANCE({pix_ra_cen}, {pix_dec_cen},
+                                    RIGHT_ASCENSION, DECLINATION) < {sub_radius} AND {quality_cuts}'''
+                job = Euclid.launch_job_async(query, verbose=True)
+                results.append(job.get_results())
+
+            results_table = vstack(results)
+            results_table = unique(results_table)
+
+            if len(results_table)!=0:
+                results_table.write(file_name, format='parquet', overwrite = True)
+
+        if len(results_table)==0:
+            print('Length of results was 0. Trying deep survey')
+            try:
+                query = f'SELECT {INCOLS} FROM dr1.mer_catalogue_deep_survey'
+                query += f''' WHERE DISTANCE({self.coord_center[0]}, {self.coord_center[1]},
+                                    RIGHT_ASCENSION, DECLINATION) < {radius} AND {quality_cuts}'''
+                print(query)
+                #job = Euclid.cone_search(coordinate=coord, radius=u_radius, columns=INCOLS, async_job=True)
+                            #this should default to the mer_catalogue, if wanting to specify table use table_name=''
+                    #try:
+                job = Euclid.launch_job_async(query, verbose=True)
+                results_table = job.get_results()
+                assert len(results_table) > 0
+            except:
+                print('deep survey query failed, returning None')
+                return None
+
+        #storing it as the euclid object so we have access to attributes
+        results_table.rename_columns(results_table.colnames, [name.upper() for name in results_table.colnames])
+        print('Column names: ', results_table.colnames)
+        print('Total number of objects: ', len(results_table))
+        results = DataObjects.EuclidData(results_table, iso_band1, iso_band2, 1, survey=ir_survey)
+        #results = self.region_cut(results, finer_nside = 4096,buffer=buffer)
+        self.data_dict[ir_survey] = results
+        return results
+
 
     def des_query(self, INCOLS, preload = True, nside_datashard = 32, step=1, buffer=True):
         '''
