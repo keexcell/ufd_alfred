@@ -68,7 +68,7 @@ SearchRegion = RegionObjects.Region(nside_search, location)
 
 if 'euclid' in ir_survey: # I suppose I'll still keep it general for Roman?
     INCOLS = utils.columns_to_query(ir_INCOLS, ir_bands, output_type = 'string')
-    quality_cuts = 'SPURIOUS_FLAG=0 AND FWHM<=1.5 AND DET_QUALITY_FLAG IN (0, 8, 512)'
+    quality_cuts = 'SPURIOUS_FLAG=0 AND SPURIOUS_PROB < 0.2 AND DET_QUALITY_FLAG = 0'
     IRData_raw = SearchRegion.euclid_query(INCOLS, quality_cuts, preload = True, nside_datashard=nside_shards)
     if IRData_raw is None:
         print('No objects found. Ending search prematurely. Look at data for debugging.')
@@ -99,9 +99,9 @@ SearchRegion.data_dict[ir_survey] = Data
 print('Data cleaned and stored', len(Data.data), ' objects left')
 
 ## Select for Stars -- Zerjal + point_like_prob Cuts
-#morphology_mask = masks_and_filters.Zerjal_stars(Data)
-point_like_prob_mask = masks_and_filters.POINT_LIKE_PROB_stars(Data, 0.05)
-stars_mask = point_like_prob_mask #morphology_mask & 
+morphology_mask = masks_and_filters.Zerjal_stars(Data)
+point_like_prob_mask = masks_and_filters.POINT_LIKE_PROB_stars(Data, 0.5)
+stars_mask = morphology_mask & point_like_prob_mask
 ## fill in the masked values with np.nan
 stars_table = Data.data[stars_mask]
 if len(stars_table)==0:
@@ -139,11 +139,9 @@ plotting_functions.isochrone_plot([iso1, iso2], {'Stellar Sample Number Counts' 
                                   save = True, ax=None, filename = f'{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.band1.str}_{Stars.band2.str}_{Stars.survey}')
 print('CMD isochrone plot ran and saved')
 
-exit()
-
 ## hotspot search
 #distance_array = np.arange(50,3000,50) #distance is given in kpc
-distance_mod_array = np.arange(17, 27, .25)
+distance_mod_array = np.arange(17, 27.5, .25)
 Peaks = []
 
 for distance_modulus in distance_mod_array:
@@ -255,6 +253,7 @@ for Peak in Peaks:
         #if type(stars_within_radius)==DataObjects.DESnEuclidData:
         #    print('Has type DESnEuclidData')
         final_Peaks.append(Peak)
+        print('appended')
         print(' ')
 #save all the peaks that are more than 1 star...
 utils.write_peak_result(final_Peaks, results_dir+f'/simplecandidates_{SearchRegion.nside}_{SearchRegion.pixel}_{Stars.survey}', save_format='csv')

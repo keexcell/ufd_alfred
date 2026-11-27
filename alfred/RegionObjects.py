@@ -249,6 +249,9 @@ class Region():
             # job_ids = [job.jobid for job in Euclid.list_async_jobs()]
             # Euclid.remove_jobs(job_ids)
             Euclid.logout()
+            if len(results_table)!=0:
+                results_table.write(file_name, format='parquet', overwrite = True)
+                print('Data saved')
 
         if len(results_table)==0:
             print('Length of results was 0')
@@ -281,9 +284,7 @@ class Region():
             job = Euclid.launch_job_async(query2, verbose=True)
             results_table2 = job.get_results()
             results_table = join(results_table, results_table2)
-            new_file_name = f'{self.nside}_{self.pixel}_euclid.parquet'
-            new_file_dir = data_dir+'/'+new_file_name #new_file_dir + '/' + new_file_name
-            results_table.write(new_file_dir, format='parquet', overwrite = True)
+            results_table.write(file_name, format='parquet', overwrite = True)
                 #    break
                 #except:
                 #    print('getting new columns failed')

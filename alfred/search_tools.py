@@ -123,7 +123,7 @@ def search_by_distance(survey, Region, distance_modulus, iso_sel, extension=None
 
     Region.density = Region.characteristic_density(iso_sel, verbose=verbose)
     x_peak_array, y_peak_array, angsep_peak_array, hist, hist_smooth = Region.find_peaks(iso_sel, distance_modulus, survey, 
-                                                                                    ra_dec_override = (65.10, -32.83), plot=plot)
+                                                                                    ra_dec_override = None, plot=plot)
    
     for x_peak, y_peak, angsep_peak in zip(x_peak_array, y_peak_array, angsep_peak_array):
         # Aperture fitting
